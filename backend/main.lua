@@ -7,7 +7,7 @@ local settings = require("settings.settings")
 local steam_manifests = require("steam.manifests")
 local vortex_cli = require("vortex.cli")
 
-local PLUGIN_VERSION = "0.4.0"
+local PLUGIN_VERSION = "0.5.0"
 local backend_started_at = os.time()
 
 local function encode_response(value)

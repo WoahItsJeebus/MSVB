@@ -1,6 +1,8 @@
 import { definePlugin, Field, IconsModule } from '@steambrew/client';
 
 import { getBackendHealth } from './backend/BackendClient';
+import { startLaunchInterception } from './launch/LaunchInterceptor';
+import type { LaunchInterception } from './launch/LaunchInterceptor';
 import { startLaunchInstrumentation } from './launch/LaunchInstrumentation';
 import type { LaunchInstrumentation } from './launch/LaunchInstrumentation';
 import { log } from './logging/Logger';
@@ -8,9 +10,10 @@ import { GameMatchPanel } from './matching/GameMatchPanel';
 import { VortexProbePanel } from './vortex/VortexProbePanel';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.4.0';
+const PLUGIN_VERSION = '0.5.0';
 
 let activeLoadId = 0;
+let launchInterception: LaunchInterception | undefined;
 let launchInstrumentation: LaunchInstrumentation | undefined;
 
 async function verifyBackend(loadId: number): Promise<boolean> {
@@ -46,9 +49,12 @@ export default definePlugin(() => {
 	log.info('frontend.loaded', {
 		pluginVersion: PLUGIN_VERSION,
 	});
+	launchInterception?.stop();
+	launchInterception = undefined;
 	launchInstrumentation?.stop();
 	launchInstrumentation = undefined;
 
+	let interception: LaunchInterception | undefined;
 	let instrumentation: LaunchInstrumentation | undefined;
 	void verifyBackend(loadId).then((backendHealthy) => {
 		if (!backendHealthy || loadId !== activeLoadId) {
@@ -57,6 +63,8 @@ export default definePlugin(() => {
 
 		instrumentation = startLaunchInstrumentation();
 		launchInstrumentation = instrumentation;
+		interception = startLaunchInterception();
+		launchInterception = interception;
 	});
 
 	return {
@@ -66,8 +74,8 @@ export default definePlugin(() => {
 		content: (
 			<>
 				<Field
-					label="Phase 1 diagnostics active"
-					description="Launch callbacks remain observation-only. The plugin does not cancel, delay, or replace Steam launch behavior."
+					label="Phase 4 direct-launch interception active"
+					description="Only direct Library Details RunGame requests are eligible. Other launch sources pass through unchanged; matching failures fail open."
 					icon={<IconsModule.Settings />}
 				/>
 				<VortexProbePanel />
@@ -75,6 +83,10 @@ export default definePlugin(() => {
 			</>
 		),
 		onDismount(): void {
+			interception?.stop();
+			if (launchInterception === interception) {
+				launchInterception = undefined;
+			}
 			instrumentation?.stop();
 			if (launchInstrumentation === instrumentation) {
 				launchInstrumentation = undefined;

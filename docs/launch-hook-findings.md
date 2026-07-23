@@ -4,6 +4,8 @@
 
 Phase 1 provides observation-only launch instrumentation in Steam's SharedJSContext. It does not cancel, continue, delay, or initiate a launch, and it does not display a modal.
 
+Phase 4 now implements a deliberately narrow direct-`RunGame` continuation path without changing the unverified route matrix below. Its separate scope, safety properties, and manual tests are documented in [launch-continuation-findings.md](launch-continuation-findings.md).
+
 No live Steam launch traces were available while implementing this phase. The build-time API findings below are confirmed against the installed `@steambrew/client` package, but event order and route behavior remain explicitly unverified until the manual matrix is run.
 
 Instrumentation is registered only after the Phase 0 backend health check succeeds. If the backend is unavailable or returns a mismatched plugin version, no launch observers are installed.
@@ -89,9 +91,9 @@ Unknown for every route. The single observation patch will report calls that res
 | Big Picture mode | Not tested |
 | Game with Steam launch-option dialog | Not tested |
 
-### Recommended interception strategy
+### Recommended callback interception strategy
 
-No interception point is recommended yet. Runtime logs must first demonstrate which callback is earliest, whether it consistently includes AppID/action ID data, and whether the process has already started. Until that evidence exists, the safe strategy is to remain observation-only.
+No callback interception point is recommended yet. Runtime logs must first demonstrate which callback is earliest, whether it consistently includes AppID/action ID data, and whether the process has already started. Phase 4 deliberately leaves these callbacks observation-only and instead holds one exact direct-`RunGame` source.
 
 After the matrix is collected, prefer one stable action callback over patching several launch methods. A candidate is acceptable only if it is present across required routes, occurs before process creation, provides a stable request identity, and can be resumed without recursion.
 
@@ -117,7 +119,7 @@ Use a short, harmless game that exits quickly. Do not use a game with unsaved wo
 5. Launch and exit the test game once through each route in the table above.
 6. For the launch-option-dialog case, record which option was selected.
 7. Save all `[VLB]` records without editing their sequence or timestamp fields.
-8. Rapidly double-click Play once and confirm duplicate summaries appear without changing normal launch behavior or emitting duplicate full-detail records.
+8. Rapidly double-click Play once and confirm duplicate summaries appear without changing Steam's behavior or emitting duplicate full-detail records.
 9. Disable the plugin and confirm every observer reports `launch.hook.unregistered`.
 10. Confirm subsequent Steam launches behave normally and produce no new `[VLB]` launch records.
 

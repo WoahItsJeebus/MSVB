@@ -1,10 +1,10 @@
 # Vortex Launch Bridge
 
-A Windows-first [Millennium](https://github.com/SteamClientHomebrew/Millennium) plugin for coordinating future Steam launches with Vortex.
+A Windows-first [Millennium](https://github.com/SteamClientHomebrew/Millennium) plugin for coordinating Steam launches with Vortex-managed games.
 
-The repository currently contains Phase 0 through Phase 3: the plugin scaffold, Lua backend lifecycle, frontend-to-backend health check, structured diagnostic logging, observation-only Steam launch instrumentation, a read-only Vortex backend probe, Steam manifest resolution, and deterministic Steam-to-Vortex game matching.
+The repository currently contains Phase 0 through Phase 4: plugin lifecycle and health checks, structured logging, Steam launch diagnostics, read-only Vortex detection/state probing, deterministic Steam-to-Vortex matching, and one narrow Steam modal/continuation route.
 
-Phase 3 does not cancel, delay, continue, or initiate Steam launches. It shows no launch modal and does not activate games or profiles.
+Phase 5 has not started. The plugin does not activate Vortex games or profiles, wait for deployment, or launch a game through Vortex.
 
 ## Requirements
 
@@ -50,41 +50,55 @@ New-Item -ItemType Junction -Path $linkPath -Target $checkoutPath
 
 If Steam is installed elsewhere, replace `$steamPath` with that installation directory. Restart Steam after creating the link, then enable **Vortex Launch Bridge** in Millennium.
 
-## Verify Phase 0 through Phase 3 manually
+## Phase 4 behavior
+
+Phase 4 intercepts only direct `SteamClient.Apps.RunGame` calls whose launch source is `_2ftLibraryDetails`. All other launch sources pass through unchanged.
+
+The complete original tuple is held in memory:
+
+```text
+Steam AppID
+launch options
+typed third RunGame parameter
+launch source
+```
+
+When no Vortex profiles match—or when checking fails—the exact tuple is replayed once through a short-lived, one-shot bypass.
+
+When profiles match, the Steam-native modal offers exactly:
+
+- `Launch with Vortex`
+- `Continue launching with Steam...`
+
+Choosing Steam replays the request once. Closing the modal, pressing Escape, or using another cancel gesture cancels the pending request. Selecting **Launch with Vortex** also cancels the held Steam request in Phase 4; Vortex activation is intentionally deferred to Phase 5.
+
+The modal does not claim that continuing with Steam changes or disables anything Vortex may already have deployed.
+
+## Verify Phase 0 through Phase 4 manually
 
 1. Run `bun run build` and confirm it exits successfully.
-2. Start Steam and enable the plugin in Millennium.
-3. Confirm the plugin appears as **Vortex Launch Bridge** version `0.4.0`.
-4. In Steam's frontend developer console, find a `[VLB]` record with event `backend.health.ok`.
-5. In the Millennium plugin log, confirm `backend.loaded`, `backend.health.requested`, and `frontend.loaded` records include component and version fields.
-6. Confirm a `[VLB]` `launch.instrumentation.started` record lists the registered observation hooks.
-7. Launch a Steam game and confirm behavior is unchanged while `launch.callback.observed` records are produced.
-8. Disable or reload the plugin and confirm every observation handle produces `launch.hook.unregistered`.
-9. Confirm `frontend.unloaded` and `backend.unloaded` are logged without an error.
-10. Open the plugin panel and confirm **Vortex installation** reports either a detected source or a clear absent result.
-11. If Vortex is in a custom location, enter the complete `Vortex.exe` path and select **Save override**. Clear it to return to registry/known-path detection.
-12. Close Vortex, select **Run read-only probe**, and confirm the panel reports the installed version, captured state-output format, profile count, and discovered-game count.
-13. Start Vortex and run the probe again. Confirm the version check is harmless and the state query is skipped rather than forwarded to the running Vortex instance.
-14. Confirm normal `[VLB]` logs contain counts, exit codes, timeout flags, and redaction markers—but no executable paths, profile names, game paths, stdout, or stderr.
-15. Close Vortex, enter an installed Steam AppID in **Phase 3 game matching**, and select **Resolve Steam path**.
-16. Confirm the panel reports `steam-client` when Steam exposes the containing library, or `manifest` when the registry/library-folder fallback resolves it.
-17. Select **Match Vortex game** and confirm an exact discovered path returns the expected Vortex game ID and profile count.
-18. Save a valid Steam AppID to Vortex game-ID mapping and confirm matching reports `configured`.
-19. Save an invalid Vortex game ID and confirm the match is rejected instead of guessing another game, then clear the mapping.
-20. Start Vortex and confirm matching fails safely because the read-only state query is skipped.
-21. Launch a Steam game and confirm the existing Phase 1 instrumentation remains observation-only.
+2. Start Steam and enable the plugin.
+3. Confirm the plugin appears as **Vortex Launch Bridge** version `0.5.0`.
+4. Confirm backend health succeeds and Phase 1 observers register.
+5. Confirm Vortex detection and the read-only probe behave as documented in [vortex-probe-findings.md](docs/vortex-probe-findings.md).
+6. Confirm Steam path resolution and deterministic matching behave as documented in [game-matching-findings.md](docs/game-matching-findings.md).
+7. Confirm `launch.interception.started` reports phase `4`, route `RunGame`, and source `_2ftLibraryDetails`.
+8. From Library Details, launch a game without matching Vortex profiles. Confirm no modal appears and Steam starts it once.
+9. Launch a matching game with profiles. Confirm exactly one modal appears.
+10. Select **Continue launching with Steam...** and confirm Steam starts the game exactly once.
+11. Repeat and dismiss with the close icon, then with Escape. Confirm the pending launch is cancelled.
+12. Repeat and select **Launch with Vortex**. Confirm no Steam launch or Vortex activation occurs in Phase 4.
+13. Rapidly click Play twice and confirm only one modal appears.
+14. Disable the plugin while a request is checking or prompting. Confirm the held request fails open once and every hook unregisters.
+15. Test the other Phase 1 launch routes and confirm Phase 4 leaves unsupported sources unchanged.
 
-The health response is validated in TypeScript before use and reports the backend platform, architecture, plugin version, Millennium version, and backend start time.
+The full Phase 4 state machine, safety rules, structured events, and manual route matrix are in [launch-continuation-findings.md](docs/launch-continuation-findings.md).
 
-The full route matrix and the fields to capture are in [docs/launch-hook-findings.md](docs/launch-hook-findings.md).
-Vortex CLI findings, state shapes, safety rules, and the remaining runtime test are in [docs/vortex-probe-findings.md](docs/vortex-probe-findings.md).
-Steam resolution, path normalization, matching order, ambiguity handling, and Phase 3 manual checks are in [docs/game-matching-findings.md](docs/game-matching-findings.md).
+## Vortex state and matching
 
-## Phase 3 settings
+The backend settings model is stored at `%LOCALAPPDATA%\VortexLaunchBridge\settings.json`. The panel exposes the Vortex executable override and a validated `steamAppIdOverrides` mapping.
 
-The backend settings model is stored at `%LOCALAPPDATA%\VortexLaunchBridge\settings.json`. The panel exposes the Vortex executable override and a validated `steamAppIdOverrides` mapping. Other later settings remain reserved and unused; Phase 3 does not use remembered launch choices, activation, or custom launch targets.
-
-The probe launches Vortex directly with a Windows process API—never through `cmd.exe`—and enforces a timeout while separately capturing stdout and stderr. Its allowlist contains only:
+The read-only Vortex command allowlist remains:
 
 ```text
 --version
@@ -95,15 +109,18 @@ The probe launches Vortex directly with a Windows process API—never through `c
 
 There is no `--set`, `--del`, direct Vortex database access, recursive drive scan, or profile/game activation.
 
-Phase 3 prefers `SteamClient.InstallFolder.GetInstallFolders()` as a library hint and validates the exact app manifest in Lua. Its fallback reads only Steam's configured library folders and exact `appmanifest_<appid>.acf` filenames. Matching order is configured override, explicit Vortex Steam ID, exact installation path, exact executable path, then no match. Ambiguous candidates and title-only matches are rejected.
+Phase 3 matching order remains configured override, explicit Vortex Steam ID, exact installation path, exact executable path, then no match. Ambiguous candidates and title-only matches are rejected.
 
 ## Tests
 
 ```powershell
 lua tests/vortex_parsers.lua
 lua tests/game_matching.lua
+npm.cmd run test:phase4
 ```
+
+`tests/launch_continuation.ts` covers exact replay and one-shot bypass behavior. Its runner compiles only the pure continuation modules into the ignored `.millennium` build directory before executing them with Node.
 
 ## Scope
 
-Phase 4 Steam modal and safe continuation work has intentionally not been started. Runtime launch order is not yet claimed or assumed. There is no launch cancellation, prompt, continuation bypass, or Vortex activation. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the planned phases and required launch semantics.
+Phase 5 Vortex profile activation has intentionally not been started. There is no profile picker, Vortex `--game`/`--profile` command, activation or deployment wait, Vortex launch target, or post-activation game launch. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the remaining phases and required launch semantics.

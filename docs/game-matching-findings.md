@@ -142,8 +142,8 @@ The Phase 3 suite covers VDF parsing, library ordering, manifest AppID validatio
 7. Clear the mapping and confirm path/store matching resumes.
 8. Start Vortex and confirm matching returns a read-only-state warning without modifying Vortex.
 9. Confirm normal logs contain AppIDs, sources, confidence, counts, and redaction markers—but no Steam paths, Vortex paths, game IDs, or profile names.
-10. Launch a Steam game and confirm Phase 1 remains observation-only and Steam behavior is unchanged.
+10. Confirm the Phase 1 observer itself remains observation-only, then use the Phase 4 continuation matrix for launch-behavior checks.
 
 ## Phase boundary
 
-Phase 4 has not started. There is no launch cancellation, modal, preserved pending request, one-shot bypass, Steam continuation, or Vortex activation in this phase.
+At the Phase 3 boundary there was no launch cancellation, modal, preserved pending request, one-shot bypass, Steam continuation, or Vortex activation. Phase 4 now supplies the narrow continuation layer documented in [launch-continuation-findings.md](launch-continuation-findings.md); Phase 5 activation remains out of scope.
