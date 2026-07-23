@@ -78,6 +78,24 @@ export interface VortexOverrideResult {
 	error?: string;
 }
 
+export interface VortexActivationResult {
+	ok: boolean;
+	started: boolean;
+	timedOut: boolean;
+	timeoutMs: number;
+	durationMs?: number;
+	errorCode?: number;
+	wasVortexRunning?: boolean;
+	isVortexRunningAfter?: boolean;
+	profileActivationRequested: boolean;
+	profileActivationConfirmed: boolean;
+	deploymentConfirmed: boolean;
+	readinessAvailable?: boolean;
+	readinessSignal: 'vortex-log-profile-switch';
+	error?: string;
+	warning?: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -298,5 +316,49 @@ export function parseVortexOverrideResult(value: unknown): VortexOverrideResult 
 		installation:
 			record.installation === undefined ? undefined : parseVortexInstallation(record.installation),
 		error: optionalString(record, 'error', 'Vortex override response'),
+	};
+}
+
+export function parseVortexActivationResult(value: unknown): VortexActivationResult {
+	const label = 'Vortex activation response';
+	const record = requireRecord(value, label);
+	const requiredBooleans = [
+		'ok',
+		'started',
+		'timedOut',
+		'profileActivationRequested',
+		'profileActivationConfirmed',
+		'deploymentConfirmed',
+	] as const;
+	for (const key of requiredBooleans) {
+		if (typeof record[key] !== 'boolean') {
+			throw new Error(`${label} has an invalid ${key} field.`);
+		}
+	}
+
+	const timeoutMs = optionalNumber(record, 'timeoutMs', label);
+	if (timeoutMs === undefined || timeoutMs < 1) {
+		throw new Error(`${label} has an invalid timeoutMs field.`);
+	}
+	if (record.readinessSignal !== 'vortex-log-profile-switch') {
+		throw new Error(`${label} has an unknown readinessSignal field.`);
+	}
+
+	return {
+		ok: record.ok as boolean,
+		started: record.started as boolean,
+		timedOut: record.timedOut as boolean,
+		timeoutMs,
+		durationMs: optionalNumber(record, 'durationMs', label),
+		errorCode: optionalNumber(record, 'errorCode', label),
+		wasVortexRunning: optionalBoolean(record, 'wasVortexRunning', label),
+		isVortexRunningAfter: optionalBoolean(record, 'isVortexRunningAfter', label),
+		profileActivationRequested: record.profileActivationRequested as boolean,
+		profileActivationConfirmed: record.profileActivationConfirmed as boolean,
+		deploymentConfirmed: record.deploymentConfirmed as boolean,
+		readinessAvailable: optionalBoolean(record, 'readinessAvailable', label),
+		readinessSignal: 'vortex-log-profile-switch',
+		error: optionalString(record, 'error', label),
+		warning: optionalString(record, 'warning', label),
 	};
 }

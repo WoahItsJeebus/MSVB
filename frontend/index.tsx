@@ -10,7 +10,7 @@ import { GameMatchPanel } from './matching/GameMatchPanel';
 import { VortexProbePanel } from './vortex/VortexProbePanel';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.5.0';
+const PLUGIN_VERSION = '0.6.0';
 
 let activeLoadId = 0;
 let launchInterception: LaunchInterception | undefined;
@@ -74,8 +74,8 @@ export default definePlugin(() => {
 		content: (
 			<>
 				<Field
-					label="Phase 4 direct-launch interception active"
-					description="Only direct Library Details RunGame requests are eligible. Other launch sources pass through unchanged; matching failures fail open."
+					label="Phase 5 Vortex profile activation active"
+					description="Eligible Library Details launches can select and activate a Vortex profile, wait for deployment confirmation, then resume the preserved Steam request."
 					icon={<IconsModule.Settings />}
 				/>
 				<VortexProbePanel />

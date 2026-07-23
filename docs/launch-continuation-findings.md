@@ -4,7 +4,7 @@
 
 Phase 4 adds one narrow interception route, a Steam-native choice modal, exact Steam continuation, dismissal-as-cancellation, duplicate suppression, and fail-open behavior.
 
-Phase 5 has not started. Selecting **Launch with Vortex** cancels the held Steam request and records that Vortex activation is deferred. It does not select, activate, deploy, start, or focus a Vortex profile or game.
+This document records the Phase 4 boundary. Phase 5 now extends the Vortex choice with the activation flow documented in [vortex-activation-findings.md](vortex-activation-findings.md); the continuation and interception safety properties below remain unchanged.
 
 ## Supported route
 

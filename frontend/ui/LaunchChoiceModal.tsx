@@ -33,8 +33,8 @@ export function LaunchChoiceModal({
 					anything Vortex may already have deployed.
 				</div>
 				<div>
-					Phase 4 validates safe Steam continuation. Vortex activation is not performed until
-					Phase 5.
+					Launching with Vortex activates a selected profile, waits for Vortex to confirm its
+					deployment work, then resumes this Steam launch.
 				</div>
 				<div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
 					<DialogButton onClick={onLaunchWithVortex}>Launch with Vortex</DialogButton>

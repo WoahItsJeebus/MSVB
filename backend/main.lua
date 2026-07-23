@@ -6,8 +6,9 @@ local game_matcher = require("matching.game_matcher")
 local settings = require("settings.settings")
 local steam_manifests = require("steam.manifests")
 local vortex_cli = require("vortex.cli")
+local vortex_launcher = require("vortex.launcher")
 
-local PLUGIN_VERSION = "0.5.0"
+local PLUGIN_VERSION = "0.6.0"
 local backend_started_at = os.time()
 
 local function encode_response(value)
@@ -148,6 +149,61 @@ function run_vortex_probe()
     })
 
     return encode_response(probe)
+end
+
+function activate_vortex_profile(vortex_game_id, vortex_profile_id)
+    log.info("vortex.activation.started", {
+        gameIdRedacted = type(vortex_game_id) == "string",
+        profileIdRedacted = type(vortex_profile_id) == "string",
+    })
+
+    local activation_ok, activation = pcall(
+        vortex_launcher.activate,
+        vortex_game_id,
+        vortex_profile_id
+    )
+    if not activation_ok then
+        log.error("vortex.activation.failed", {
+            resultAvailable = false,
+            identifiersRedacted = true,
+        })
+        return encode_response({
+            ok = false,
+            started = false,
+            timedOut = false,
+            timeoutMs = settings.get().vortexActivationTimeoutMs,
+            profileActivationRequested = false,
+            profileActivationConfirmed = false,
+            deploymentConfirmed = false,
+            readinessAvailable = false,
+            readinessSignal = "vortex-log-profile-switch",
+            error = "Vortex activation failed before producing a result.",
+        })
+    end
+
+    local log_fields = {
+        ok = activation.ok == true,
+        started = activation.started == true,
+        timedOut = activation.timedOut == true,
+        timeoutMs = activation.timeoutMs,
+        durationMs = activation.durationMs,
+        wasVortexRunning = activation.wasVortexRunning == true,
+        isVortexRunningAfter = activation.isVortexRunningAfter == true,
+        profileActivationRequested =
+            activation.profileActivationRequested == true,
+        profileActivationConfirmed =
+            activation.profileActivationConfirmed == true,
+        deploymentConfirmed = activation.deploymentConfirmed == true,
+        readinessAvailable = activation.readinessAvailable == true,
+        readinessSignal = activation.readinessSignal,
+        identifiersRedacted = true,
+    }
+    if activation.ok == true then
+        log.info("vortex.activation.completed", log_fields)
+    else
+        log.warn("vortex.activation.failed", log_fields)
+    end
+    return encode_response(activation)
 end
 
 local function app_id_number(value)

@@ -146,4 +146,4 @@ The Phase 3 suite covers VDF parsing, library ordering, manifest AppID validatio
 
 ## Phase boundary
 
-At the Phase 3 boundary there was no launch cancellation, modal, preserved pending request, one-shot bypass, Steam continuation, or Vortex activation. Phase 4 now supplies the narrow continuation layer documented in [launch-continuation-findings.md](launch-continuation-findings.md); Phase 5 activation remains out of scope.
+At the Phase 3 boundary there was no launch cancellation, modal, preserved pending request, one-shot bypass, Steam continuation, or Vortex activation. Phase 4 supplied the narrow continuation layer documented in [launch-continuation-findings.md](launch-continuation-findings.md), and Phase 5 now extends it with [confirmed profile activation](vortex-activation-findings.md).

@@ -11,7 +11,12 @@ import {
 import { log } from '../logging/Logger';
 import { matchVortexGame } from '../matching/MatchClient';
 import type { VortexGameMatch } from '../matching/MatchTypes';
+import { ActivationErrorModal } from '../ui/ActivationErrorModal';
+import { ActivationProgressModal } from '../ui/ActivationProgressModal';
 import { LaunchChoiceModal } from '../ui/LaunchChoiceModal';
+import { ProfileChoiceModal } from '../ui/ProfileChoiceModal';
+import { activateVortexProfile } from '../vortex/VortexClient';
+import type { VortexProfile } from '../vortex/VortexTypes';
 import { LaunchBypass } from './LaunchBypass';
 import {
 	createSteamLaunchRequest,
@@ -23,10 +28,19 @@ import { SteamLauncher } from './SteamLauncher';
 type PendingState =
 	| 'checking-vortex'
 	| 'awaiting-user'
+	| 'selecting-profile'
+	| 'activating-vortex'
 	| 'continuing-steam'
+	| 'launching'
 	| 'cancelled'
 	| 'completed'
 	| 'failed';
+
+type CancellationReason =
+	| 'dismissed'
+	| 'profile-selection-dismissed'
+	| 'activation-cancelled'
+	| 'activation-failure-cancelled';
 
 interface PendingLaunch {
 	request: SteamLaunchRequest;
@@ -165,7 +179,40 @@ export function startLaunchInterception(): LaunchInterception {
 		}
 	}
 
-	function cancelPending(pending: PendingLaunch, reason: 'dismissed' | 'vortex-selected'): void {
+	function launchAfterVortexActivation(pending: PendingLaunch): void {
+		if (!isCurrent(pending)) {
+			return;
+		}
+
+		pending.state = 'launching';
+		closeModal(pending);
+		try {
+			// Phase 5 intentionally uses the preserved Steam request as its first
+			// launch target. Alternate Vortex tools remain a later-phase concern.
+			launcher.continueLaunch(pending.request);
+			pending.state = 'completed';
+			log.info('launch.post_activation_steam_target_started', {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				launchSource: pending.request.launchSource,
+				launchOptionsPresent: pending.request.launchOptions.length > 0,
+				launchOptionsRedacted: true,
+				duplicateCount: pending.duplicateCount,
+				activationConfirmed: true,
+				deploymentConfirmed: true,
+			});
+		} catch (error: unknown) {
+			pending.state = 'failed';
+			log.error('launch.post_activation_steam_target_failed', error, {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+			});
+		} finally {
+			removePending(pending);
+		}
+	}
+
+	function cancelPending(pending: PendingLaunch, reason: CancellationReason): void {
 		if (!isCurrent(pending)) {
 			return;
 		}
@@ -181,7 +228,176 @@ export function startLaunchInterception(): LaunchInterception {
 			requestId: pending.request.requestId,
 			steamAppId: pending.request.numericAppId,
 			reason,
-			vortexActivationDeferred: reason === 'vortex-selected',
+		});
+	}
+
+	function showActivationFailure(
+		pending: PendingLaunch,
+		message: string,
+		warning?: string,
+	): void {
+		if (!isCurrent(pending) || !active) {
+			return;
+		}
+
+		pending.state = 'failed';
+		closeModal(pending);
+		pending.modal = showModal(
+			<ActivationErrorModal
+				message={message}
+				warning={warning}
+				onContinueWithSteam={() =>
+					continueWithSteam(pending, 'activation-failed-user-continued')
+				}
+				onCancel={() => cancelPending(pending, 'activation-failure-cancelled')}
+			/>,
+			undefined,
+			{
+				strTitle: 'Vortex activation failed',
+				bHideMainWindowForPopouts: false,
+				bNeverPopOut: true,
+			},
+		);
+	}
+
+	async function activateProfile(
+		pending: PendingLaunch,
+		match: VortexGameMatch,
+		profile: VortexProfile,
+	): Promise<void> {
+		if (!isCurrent(pending) || !active || pending.state !== 'selecting-profile') {
+			return;
+		}
+		if (match.vortexGameId === undefined || profile.gameId !== match.vortexGameId) {
+			showActivationFailure(
+				pending,
+				'The selected Vortex profile does not match this game.',
+			);
+			return;
+		}
+
+		pending.state = 'activating-vortex';
+		closeModal(pending);
+		pending.modal = showModal(
+			<ActivationProgressModal
+				onDismiss={() => cancelPending(pending, 'activation-cancelled')}
+			/>,
+			undefined,
+			{
+				strTitle: 'Activating Vortex profile',
+				bHideMainWindowForPopouts: false,
+				bNeverPopOut: true,
+			},
+		);
+		log.info('vortex.profile.selected', {
+			requestId: pending.request.requestId,
+			steamAppId: pending.request.numericAppId,
+			profileIdRedacted: true,
+			gameIdRedacted: true,
+		});
+
+		try {
+			const result = await activateVortexProfile(match.vortexGameId, profile.id);
+			if (!isCurrent(pending) || !active) {
+				return;
+			}
+			if (
+				!result.ok ||
+				!result.profileActivationConfirmed ||
+				!result.deploymentConfirmed
+			) {
+				log.warn('vortex.activation.not_confirmed', {
+					requestId: pending.request.requestId,
+					steamAppId: pending.request.numericAppId,
+					started: result.started,
+					timedOut: result.timedOut,
+					timeoutMs: result.timeoutMs,
+					wasVortexRunning: result.wasVortexRunning,
+					isVortexRunningAfter: result.isVortexRunningAfter,
+					readinessAvailable: result.readinessAvailable,
+					readinessSignal: result.readinessSignal,
+					identifiersRedacted: true,
+				});
+				showActivationFailure(
+					pending,
+					result.error ?? 'Vortex did not confirm the selected profile.',
+					result.warning,
+				);
+				return;
+			}
+
+			log.info('vortex.activation.confirmed', {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				durationMs: result.durationMs,
+				wasVortexRunning: result.wasVortexRunning,
+				isVortexRunningAfter: result.isVortexRunningAfter,
+				readinessSignal: result.readinessSignal,
+				identifiersRedacted: true,
+			});
+			launchAfterVortexActivation(pending);
+		} catch (error: unknown) {
+			if (!isCurrent(pending)) {
+				return;
+			}
+			interceptionEnabled = false;
+			log.error('vortex.activation.bridge_failed', error, {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				futureLaunchesPassThrough: true,
+			});
+			showActivationFailure(
+				pending,
+				'Vortex activation could not be completed because the plugin backend is unavailable.',
+			);
+		}
+	}
+
+	function beginVortexFlow(pending: PendingLaunch, match: VortexGameMatch): void {
+		if (
+			!isCurrent(pending) ||
+			!active ||
+			pending.state !== 'awaiting-user' ||
+			match.vortexGameId === undefined
+		) {
+			return;
+		}
+		pending.state = 'selecting-profile';
+
+		const profiles = match.profiles.filter(
+			(profile) => profile.gameId === match.vortexGameId,
+		);
+		if (profiles.length === 0) {
+			showActivationFailure(
+				pending,
+				'No valid Vortex profile remains available for this game.',
+			);
+			return;
+		}
+		if (profiles.length === 1) {
+			void activateProfile(pending, match, profiles[0]);
+			return;
+		}
+
+		closeModal(pending);
+		pending.modal = showModal(
+			<ProfileChoiceModal
+				profiles={profiles}
+				onSelect={(profile) => void activateProfile(pending, match, profile)}
+				onDismiss={() => cancelPending(pending, 'profile-selection-dismissed')}
+			/>,
+			undefined,
+			{
+				strTitle: 'Select a Vortex profile',
+				bHideMainWindowForPopouts: false,
+				bNeverPopOut: true,
+			},
+		);
+		log.info('vortex.profile_selection.shown', {
+			requestId: pending.request.requestId,
+			steamAppId: pending.request.numericAppId,
+			profileCount: profiles.length,
+			identifiersRedacted: true,
 		});
 	}
 
@@ -203,7 +419,7 @@ export function startLaunchInterception(): LaunchInterception {
 			<LaunchChoiceModal
 				steamAppId={pending.request.numericAppId}
 				profileCount={match.profiles.length}
-				onLaunchWithVortex={() => cancelPending(pending, 'vortex-selected')}
+				onLaunchWithVortex={() => beginVortexFlow(pending, match)}
 				onContinueWithSteam={() => continueWithSteam(pending, 'user-selected-steam')}
 				onDismiss={() => cancelPending(pending, 'dismissed')}
 			/>,
@@ -351,7 +567,7 @@ export function startLaunchInterception(): LaunchInterception {
 	}
 
 	log.info('launch.interception.started', {
-		phase: 4,
+		phase: 5,
 		route: 'RunGame',
 		launchSource: SUPPORTED_LAUNCH_SOURCE,
 		launchSourceName: ELaunchSource[SUPPORTED_LAUNCH_SOURCE],

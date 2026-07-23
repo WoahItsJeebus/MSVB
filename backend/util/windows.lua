@@ -116,6 +116,7 @@ VLB_BOOL __stdcall TerminateProcess(VLB_HANDLE hProcess, unsigned int uExitCode)
 VLB_BOOL __stdcall CloseHandle(VLB_HANDLE hObject);
 VLB_DWORD __stdcall GetLastError(void);
 VLB_ULONGLONG __stdcall GetTickCount64(void);
+void __stdcall Sleep(VLB_DWORD dwMilliseconds);
 int __stdcall MultiByteToWideChar(
     unsigned int CodePage,
     VLB_DWORD dwFlags,
@@ -591,6 +592,92 @@ function M.run_process(executable, arguments, options)
         stdoutTruncated = stdout_total > stdout_captured,
         stderrTruncated = stderr_total > stderr_captured,
     }
+end
+
+function M.start_process(executable, arguments)
+    arguments = arguments or {}
+
+    if type(executable) ~= "string" or executable == "" then
+        return {
+            started = false,
+            error = "Executable path is empty",
+        }
+    end
+
+    local command_parts = { quote_windows_argument(executable) }
+    for _, argument in ipairs(arguments) do
+        if type(argument) ~= "string" then
+            return {
+                started = false,
+                error = "Process arguments must be strings",
+            }
+        end
+        command_parts[#command_parts + 1] = quote_windows_argument(argument)
+    end
+
+    local executable_wide, executable_error = utf8_to_wide(executable)
+    if executable_wide == nil then
+        return {
+            started = false,
+            error = executable_error,
+        }
+    end
+
+    local command_wide, command_error =
+        utf8_to_wide(table.concat(command_parts, " "))
+    if command_wide == nil then
+        return {
+            started = false,
+            error = command_error,
+        }
+    end
+
+    local startup = ffi.new("VLB_STARTUPINFOW")
+    startup.cb = ffi.sizeof(startup)
+    local process_info = ffi.new("VLB_PROCESS_INFORMATION")
+    local started_at = tonumber(kernel32.GetTickCount64())
+    local created = kernel32.CreateProcessW(
+        executable_wide,
+        command_wide,
+        nil,
+        nil,
+        0,
+        0,
+        nil,
+        nil,
+        startup,
+        process_info
+    )
+
+    if created == 0 then
+        local error_code = last_error()
+        return {
+            started = false,
+            errorCode = error_code,
+            error = "CreateProcessW failed with Windows error " ..
+                tostring(error_code),
+        }
+    end
+
+    local process_id = tonumber(process_info.dwProcessId)
+    close_handle(process_info.hThread)
+    close_handle(process_info.hProcess)
+
+    return {
+        started = true,
+        processId = process_id,
+        durationMs = tonumber(kernel32.GetTickCount64()) - started_at,
+    }
+end
+
+function M.monotonic_milliseconds()
+    return tonumber(kernel32.GetTickCount64())
+end
+
+function M.sleep(milliseconds)
+    local duration = tonumber(milliseconds) or 0
+    duration = math.max(0, math.min(math.floor(duration), 1000))
+    kernel32.Sleep(duration)
 end
 
 function M.is_process_running(executable_name)

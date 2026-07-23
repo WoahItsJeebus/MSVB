@@ -1,9 +1,11 @@
 import { callable } from '@steambrew/client';
 
 import {
+	parseVortexActivationResult,
 	parseVortexInstallation,
 	parseVortexOverrideResult,
 	parseVortexProbeResult,
+	type VortexActivationResult,
 	type VortexInstallation,
 	type VortexOverrideResult,
 	type VortexProbeResult,
@@ -12,6 +14,10 @@ import {
 const requestInstallation = callable<[], string>('get_vortex_installation');
 const requestOverride = callable<[{ executable_path: string }], string>('set_vortex_executable_path');
 const requestProbe = callable<[], string>('run_vortex_probe');
+const requestActivation = callable<
+	[{ vortex_game_id: string; vortex_profile_id: string }],
+	string
+>('activate_vortex_profile');
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
@@ -57,4 +63,19 @@ export async function setVortexExecutablePath(path: string): Promise<VortexOverr
 export async function runVortexProbe(): Promise<VortexProbeResult> {
 	const response = await withTimeout(requestProbe(), 45_000, 'The read-only Vortex probe');
 	return parseVortexProbeResult(parseJson(response, 'The read-only Vortex probe'));
+}
+
+export async function activateVortexProfile(
+	gameId: string,
+	profileId: string,
+): Promise<VortexActivationResult> {
+	const response = await withTimeout(
+		requestActivation({
+			vortex_game_id: gameId,
+			vortex_profile_id: profileId,
+		}),
+		310_000,
+		'Vortex profile activation',
+	);
+	return parseVortexActivationResult(parseJson(response, 'Vortex profile activation'));
 }
