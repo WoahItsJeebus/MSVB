@@ -1,0 +1,83 @@
+name: Bug report
+description: Report reproducible incorrect behavior in Vortex Launch Bridge.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not post security-sensitive details here; follow SECURITY.md instead.
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      placeholder: "0.7.13"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Windows, Steam, Millennium, and Vortex versions.
+      placeholder: "Windows 11; Steam build ...; Millennium 3.3.1; Vortex 2.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: vortex-running
+    attributes:
+      label: Was Vortex already running?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Use the smallest reliable sequence.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized log excerpt
+      description: Remove personal paths, launch arguments, profile data, and other sensitive information.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for this behavior.
+          required: true
+        - label: I reproduced this with the latest released plugin version.
+          required: true
+        - label: I reviewed the excerpt for sensitive information.
+          required: true

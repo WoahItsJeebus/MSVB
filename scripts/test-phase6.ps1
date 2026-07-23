@@ -32,6 +32,15 @@ try {
 	if (-not (Test-Path -LiteralPath 'backend\util\process_shell.exe')) {
 		throw 'The hidden process shell is missing.'
 	}
+	$processShellSource = Get-Content -LiteralPath 'backend\util\process_shell.cs' -Raw
+	if ($processShellSource -notmatch 'CreateNoWindow\s*=\s*true' -or
+		$processShellSource -notmatch 'WindowStyle\s*=\s*ProcessWindowStyle\.Hidden' -or
+		$processShellSource -notmatch 'CreateDesktop\(' -or
+		$processShellSource -notmatch 'CreateProcess\(' -or
+		$processShellSource -notmatch 'desktop\s*=\s*desktopName' -or
+		-not $processShellSource.Contains('\"capture\":true')) {
+		throw 'Bridge runners must suppress consoles, and captured process trees must run on a hidden desktop.'
+	}
 	if ($backendMain -notmatch 'function\s+verify_process_bridge\(\)') {
 		throw 'Backend startup must expose process bridge verification.'
 	}

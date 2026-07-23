@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a focused improvement to Vortex Launch Bridge.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem would this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired user-visible behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: This request does not depend on removing deployed mods or promising a vanilla launch.
+          required: true
+        - label: This request preserves fail-open behavior for unsupported Steam launch paths.
+          required: true

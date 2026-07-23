@@ -101,6 +101,50 @@ try {
 		if ($LASTEXITCODE -ne 0) {
 			throw 'The hidden process shell test failed.'
 		}
+
+		$desktopProbe = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\desktop_probe.ps1'
+		$desktopRequestPath = Join-Path $testRoot 'desktop-probe.json'
+		$desktopRequest = @{
+			operation = 'process'
+			executable = $powershell
+			arguments = @(
+				'-NoProfile',
+				'-NonInteractive',
+				'-ExecutionPolicy',
+				'Bypass',
+				'-File',
+				$desktopProbe
+			)
+			capture = $true
+			timeout_ms = 10000
+			maximum_output_bytes = 4096
+		}
+		[System.IO.File]::WriteAllText(
+			$desktopRequestPath,
+			($desktopRequest | ConvertTo-Json -Depth 8 -Compress),
+			(New-Object System.Text.UTF8Encoding($false))
+		)
+		$runnerCommand =
+			'"' + $powershell + '"' +
+			' -WindowStyle Hidden -NoLogo -NoProfile -NonInteractive' +
+			' -ExecutionPolicy Bypass -File "' + $runner + '"' +
+			' -RequestPath "' + $desktopRequestPath + '"'
+		$desktopJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				$runnerCommand `
+				'started' `
+				'emit'
+		) -join "`n"
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The hidden desktop process-shell test failed.'
+		}
+		$desktopResult = $desktopJson | ConvertFrom-Json
+		if (-not $desktopResult.started -or
+			$desktopResult.exitCode -ne 0 -or
+			$desktopResult.stdout -notmatch '^VortexLaunchBridge-') {
+			throw 'Captured process trees were not isolated on a hidden desktop.'
+		}
 	}
 	finally {
 		$env:ComSpec = $originalCommandProcessor

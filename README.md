@@ -1,200 +1,188 @@
 # Vortex Launch Bridge
 
-A Windows-first [Millennium](https://github.com/SteamClientHomebrew/Millennium) plugin for coordinating Steam launches with Vortex-managed games.
+[![Version](https://img.shields.io/badge/version-0.7.15-2ea3f2)](CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
+[![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-The repository contains the complete Phase 0 through Phase 6 MVP: plugin lifecycle and health checks, redacted diagnostics, read-only Vortex probing, deterministic matching, exact Steam continuation, confirmed profile activation, additional direct Steam routes, opt-in remembered choices, per-game custom launch tools, recovery dialogs, settings UI, and automated pure-module tests.
+Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coordinates Steam launches with Vortex-managed profiles. When you start an eligible game, it lets you activate a Vortex profile first, continue the original Steam launch, or cancel.
 
-The backend uses a bounded pure-Lua JSON encoder for responses, logs, and saved
-settings. This avoids a native encoder crash observed in Millennium v3.3.1 when
-returning a successful nested game/profile match.
+## Features
 
-Windows process and registry operations are isolated from Millennium 3.3.1's
-unstable LuaJIT FFI and native-JSON paths. A packaged Windows-subsystem broker
-runs the PowerShell/.NET worker without creating console windows. It preserves
-direct process arguments, output capture, timeouts, process detection, and
-registry discovery, and is verified before interception is enabled.
+- Detects Vortex and reads its supported game/profile state without editing it.
+- Warms a background cache at plugin startup so eligible launch prompts appear without a long lookup delay.
+- Uses the game's Steam name and profile count in a native, theme-aware Steam confirmation dialog.
+- Activates a selected Vortex profile and waits for Vortex to confirm deployment before starting the configured target.
+- Preserves the exact intercepted Steam launch request when you choose **Continue launching with Steam...**
+- Supports optional remembered choices, preferred profiles, custom executables, custom arguments, and exact Steam AppID-to-Vortex game mappings.
+- Fails open before interception whenever eligibility cannot be established safely.
+- Keeps settings and diagnostic data local and redacts paths and launch arguments from normal logs.
+
+> [!IMPORTANT]
+> **Continue launching with Steam... is not a "vanilla mode."** It replays Steam's original launch request, but it does not remove or change anything Vortex may already have deployed.
 
 ## Requirements
 
-- Windows 10 or newer
-- The desktop Steam client with Millennium installed
-- [Git](https://git-scm.com/downloads)
-- [Bun](https://bun.sh/)
+- Windows 10 or Windows 11
+- Desktop Steam
+- [Millennium](https://docs.steambrew.app/users/installing)
+- [Vortex](https://www.nexusmods.com/about/vortex/)
 
-This scaffold is based on the official Millennium PluginTemplate at commit `fbe04927f622cbb60909f269f687434574987ff3` (2026-06-08).
+The current release has been tested with Millennium 3.3.1 and Vortex 2.3.0.
 
-## Install dependencies
+## Installation
 
-From PowerShell in the repository root:
+### Millennium plugin catalog
 
-```powershell
-bun install
+Once the plugin is listed in the Steam Homebrew plugin catalog:
+
+1. Open **Steam > Millennium Settings > Plugins**.
+2. Choose **Install a plugin**.
+3. Enter the plugin ID `vortex-launch-bridge` and install it.
+4. Restart Steam when prompted.
+
+### Development installation
+
+Use this method for an unreleased build or local development.
+
+1. Install [Node.js 20](https://nodejs.org/) and pnpm 10:
+
+   ```powershell
+   npm install --global pnpm@10.34.5
+   ```
+
+2. Clone and build the repository:
+
+   ```powershell
+   git clone https://github.com/WoahItsJeebus/MSVB.git
+   Set-Location MSVB
+   pnpm install
+   pnpm run build
+   ```
+
+3. Close Steam completely.
+4. Open an elevated PowerShell window in the checkout and create a directory junction:
+
+   ```powershell
+   New-Item `
+     -ItemType Junction `
+     -Path 'C:\Program Files (x86)\Steam\millennium\plugins\vortex-launch-bridge' `
+     -Target (Resolve-Path '.')
+   ```
+
+   Adjust the Steam path if your Millennium installation is elsewhere. The destination must not already exist.
+
+5. Start Steam. Rebuild and restart Steam after changing plugin code.
+
+The junction links the development checkout directly to Millennium; it does not duplicate the repository.
+
+## Using the plugin
+
+Vortex Launch Bridge scans Vortex's read-only state in the background when Steam starts. Launch a Steam game that Vortex manages and that has at least one valid Vortex profile. The prompt offers three actions:
+
+- **Launch with Vortex** activates a profile, waits for deployment confirmation, and starts the configured launch target.
+- **Continue launching with Steam...** replays the exact Steam request without changing Vortex state.
+- **Cancel** abandons the intercepted request.
+
+For the most reliable profile activation with Vortex 2.3.0, close Vortex before choosing **Launch with Vortex**. Vortex currently applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
+
+## Settings
+
+Open **Steam > Millennium Settings > Plugins > Vortex Launch Bridge** to configure:
+
+- whether every eligible launch asks first;
+- opt-in remembered launch choices per game;
+- diagnostic launch logging;
+- the Vortex activation timeout;
+- a preferred Vortex profile for each Steam AppID;
+- an optional custom executable and arguments after activation;
+- Vortex executable detection or an explicit override;
+- read-only Vortex and game-matching diagnostics;
+- exact Steam AppID-to-Vortex game-ID overrides.
+
+Settings are stored locally at:
+
+```text
+%LOCALAPPDATA%\VortexLaunchBridge\settings.json
 ```
 
-## Build
+## Troubleshooting
 
-Create a development or production bundle:
+### No launch prompt appears
 
-```powershell
-bun run dev
-bun run build
-```
+- Confirm the plugin is enabled and Steam was restarted after installation.
+- Open the plugin settings and run **Detect Vortex** and **Run read-only probe**.
+- Confirm Vortex manages the game and has at least one valid profile for it.
+- If automatic matching fails, configure an exact Steam AppID-to-Vortex game-ID override.
 
-Build output is written to `.millennium/Dist`.
+### Vortex activation times out
 
-## Link the development checkout to Millennium
+- Fully exit Vortex, including its notification-area process, and try again.
+- Increase the activation timeout in the plugin settings if deployment normally takes longer.
+- Verify the selected profile still exists and deploys successfully from Vortex itself.
 
-Millennium accepts a directory junction from Steam's `plugins` directory to this checkout. Run PowerShell as a user permitted to create the junction:
+### Logs
 
-```powershell
-$steamPath = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam').InstallPath
-$pluginsPath = Join-Path $steamPath 'plugins'
-$checkoutPath = (Get-Location).Path
-$linkPath = Join-Path $pluginsPath 'vortex-launch-bridge'
-
-New-Item -ItemType Directory -Force -Path $pluginsPath
-New-Item -ItemType Junction -Path $linkPath -Target $checkoutPath
-```
-
-If Steam is installed elsewhere, replace `$steamPath` with that installation directory. Restart Steam after creating the link, then enable **Vortex Launch Bridge** in Millennium.
-
-## Logs
-
-After the backend initializes, its log is written to:
+The backend log is normally written to:
 
 ```text
 <Steam>\millennium\logs\vortex-launch-bridge_log.log
 ```
 
-Frontend lifecycle and pre-backend crash messages appear in:
+Millennium frontend output is written to:
 
 ```text
 <Steam>\logs\webhelper_js.txt
 ```
 
-If the plugin is marked as crashed and the backend log does not exist, inspect `webhelper_js.txt` first: the Lua VM may have failed before the logger was initialized.
+Enable diagnostic launch logging only while investigating a problem. Before sharing logs, review them for information specific to your system.
 
-## Phase 6 MVP behavior
+If the issue persists, open a [bug report](https://github.com/WoahItsJeebus/MSVB/issues/new?template=bug_report.yml) with the plugin, Millennium, Vortex, and Windows versions plus the smallest relevant log excerpt.
 
-The bridge intercepts only direct `SteamClient.Apps.RunGame` calls. It supports Library Details, list/grid/minimode, Big Picture, command-line, Steam URL run/launch, tray, library context-menu/double-click, and portrait-context-menu source values. Automatic/internal sources such as install completion, downloads, remote streaming, lobby/party joins, DRM recovery, and already-running discovery pass through unchanged.
+## Safety and privacy
 
-After interception starts, the frontend asynchronously warms a memory-only
-snapshot of Vortex's discovered games and profiles and refreshes it every five
-minutes. Launch matching uses the last successful snapshot, so the normal Play
-path does not wait for Vortex's multi-second read-only state query. A failed
-background refresh retains the prior snapshot; changing the configured Vortex
-executable invalidates it, and a successful manual probe replaces it.
+The plugin does not:
 
-Callback-based Steam action APIs remain observation-only because their pre-process timing has not been established. A source is supported only when it reaches the patched `RunGame` property; routes that bypass it remain untouched.
+- edit Vortex's profile or deployment state directly;
+- use Vortex state mutation commands;
+- scan unrelated drives;
+- inject into game processes;
+- remove deployed mods when continuing through Steam;
+- send telemetry or settings over the network.
 
-The complete original tuple is held in memory:
+Process launches avoid a command shell, custom arguments use bounded parsing, settings are validated before use, and asynchronous work is bounded by explicit timeouts. See [Architecture](docs/architecture.md) for the design and trust boundaries.
 
-```text
-Steam AppID
-launch options
-typed third RunGame parameter
-launch source
-```
+## Development
 
-When no Vortex profiles match—or when checking fails—the exact tuple is replayed once through a short-lived, one-shot bypass.
-
-When profiles match, the Steam-native modal offers exactly:
-
-- `Launch with Vortex`
-- `Continue launching with Steam...`
-- `Cancel`
-
-Choosing Steam replays the request once. Choosing Cancel, closing the launch-choice modal, pressing Escape, or using another cancel gesture cancels the pending request.
-
-Choosing **Launch with Vortex** activates the only matching profile directly or opens a profile picker when several profiles exist. The backend starts Vortex with fixed `--game` and `--profile` arguments, then tails only newly written Vortex log data for the exact selected game/profile completion event. Vortex emits that event after its profile deployment chain completes. Only then does the frontend start the configured per-game target.
-
-The settings panel can opt in to remembered per-game decisions. **Always ask** is enabled by default and overrides every saved decision. With remembering enabled and Always ask disabled, a saved Steam choice replays the request; a saved Vortex choice runs only when its exact saved profile is still available. A stale profile returns to the modal instead of guessing.
-
-Launch, activation, and recovery dialogs use Steam's native confirmation
-components so typography, buttons, focus behavior, and close controls follow the
-active Steam theme. Settings controls use full-width responsive groups; action
-rows wrap at narrow panel widths and per-game details appear only after an AppID
-has been loaded.
-
-Each Steam AppID can use the preserved Steam request or an existing absolute `.exe` after confirmed Vortex activation. Custom arguments are parsed into separate `CreateProcessW` arguments without a command shell. Paths and arguments are redacted from normal and diagnostic logs. If the custom target or post-activation Steam target fails, the request remains recoverable through `Continue launching with Steam...` or `Cancel`.
-
-While activation is pending, a progress dialog can cancel the held Steam launch. If activation exits early or times out, the error dialog offers exactly:
-
-- `Continue launching with Steam...`
-- `Cancel`
-
-The timeout path warns that Vortex may still finish the requested profile change. The modal does not claim that continuing with Steam changes or disables anything Vortex may already have deployed.
-
-Current Vortex 2.3.0 accepts `--profile` on a cold start, but its second-instance handler does not apply profile/game arguments to an already-running primary instance. The bridge therefore requires a fresh Vortex start for a confirmed activation. If Vortex starts in the gap between matching and activation, the request times out safely into the error dialog instead of starting the game without confirmation.
-
-See [vortex-activation-findings.md](docs/vortex-activation-findings.md) for the readiness contract and current Vortex limitation.
-
-## Verify the Phase 6 MVP manually
-
-1. Run `bun run build` and confirm it exits successfully.
-2. Start Steam and enable the plugin.
-3. Confirm the plugin appears as **Vortex Launch Bridge** version `0.7.13`.
-4. Confirm backend health succeeds and Phase 1 observers register.
-5. Confirm Vortex detection and the read-only probe behave as documented in [vortex-probe-findings.md](docs/vortex-probe-findings.md).
-6. Confirm Steam path resolution and deterministic matching behave as documented in [game-matching-findings.md](docs/game-matching-findings.md).
-7. Confirm `launch.interception.started` reports phase `6`, route `RunGame`, and the supported source list.
-8. From Library Details, launch a game without matching Vortex profiles. Confirm no modal appears and Steam starts it once.
-9. Launch a matching game with profiles. Confirm exactly one modal appears.
-10. Select **Continue launching with Steam...** and confirm Steam starts the game exactly once.
-11. Repeat and dismiss with the close icon, then with Escape. Confirm the pending launch is cancelled.
-12. With Vortex closed and the default Steam target configured, repeat and select **Launch with Vortex** for a game with one profile. Confirm Vortex starts, the progress dialog remains until deployment confirmation, and Steam starts the preserved request exactly once.
-13. Repeat with several profiles. Confirm the profile picker appears and the selected profile becomes active before the configured target starts.
-14. Start Vortex manually while the initial launch-choice modal is open, then select **Launch with Vortex**. Confirm the activation times out into the error dialog with `Continue launching with Steam...` and `Cancel`.
-15. Test each error choice. Confirm Continue replays once and Cancel does not start the game.
-16. Dismiss the profile picker and progress dialog. Confirm each dismissal cancels the pending Steam launch.
-17. Rapidly click Play twice and confirm only one modal appears.
-18. Disable the plugin while a request is checking, prompting, or activating. Confirm the held request fails open once and every hook unregisters.
-19. Test each supported direct route and confirm matching games receive one prompt while unmatched games start once without a prompt.
-20. Confirm install-complete, download, streaming, lobby/party, DRM, and already-running sources pass through.
-21. Enable remembering, disable Always ask, save Steam and Vortex choices in turn, and confirm each applies only to its AppID.
-22. Remove or rename a remembered Vortex profile and confirm the next launch prompts instead of selecting another profile.
-23. Configure a harmless custom `.exe` with quoted arguments. Confirm it starts only after Vortex activation and Steam is not replayed.
-24. Make the custom executable unavailable after saving. Confirm the recovery dialog offers `Continue launching with Steam...` and `Cancel`.
-25. Enable diagnostic logging and confirm detailed callback records appear; disable it and confirm they stop while operational warnings/errors remain.
-
-The final route, settings, launch-target, and recovery contracts are in [phase6-hardening-settings.md](docs/phase6-hardening-settings.md).
-
-## Vortex state and matching
-
-The backend settings model is stored at `%LOCALAPPDATA%\VortexLaunchBridge\settings.json`. The panel exposes the Vortex executable override and a validated `steamAppIdOverrides` mapping.
-
-The read-only Vortex command allowlist remains:
-
-```text
---version
---get persistent.profiles
---get settings.profiles.lastActiveProfile
---get settings.gameMode.discovered
-```
-
-Profile activation uses one fixed command shape:
-
-```text
---game <matched-game-id> --profile <selected-profile-id>
-```
-
-Identifiers are validated and passed as separate `CreateProcessW` arguments. There is no shell, `--set`, `--del`, direct Vortex database access, recursive drive scan, or direct Vortex state edit. Normal logs redact game/profile IDs and never include Vortex log contents.
-
-Phase 3 matching order remains configured override, explicit Vortex Steam ID, exact installation path, exact executable path, then no match. Ambiguous candidates and title-only matches are rejected.
-
-## Tests
+Prerequisites are Node.js 20, pnpm 10, Windows PowerShell, and Lua 5.1 on `PATH`.
 
 ```powershell
-lua tests/vortex_parsers.lua
-lua tests/game_matching.lua
-lua tests/vortex_launcher.lua
-npm.cmd run test:phase4
-npm.cmd run test:phase5
-npm.cmd run test:phase6
+pnpm install
+pnpm run build
+pnpm test
 ```
 
-`test:phase6` runs exact replay, activation, remembered-policy, custom argument parsing, Vortex-state parsing, deterministic matching, and activation-signal coverage. The TypeScript runner compiles only pure modules into the ignored `.millennium` build directory before executing them with Node.
+`pnpm test` runs the complete launch, activation, settings, parsing, caching, matching, and process-runner regression suite. If `backend/util/process_shell.cs` changes, rebuild its committed Windows-subsystem helper with:
 
-## Scope
+```powershell
+pnpm run build:process-shell
+pnpm test
+```
 
-The MVP is complete through the final phase. It still does not purge or disable deployed mods, edit Vortex state, manage profiles or downloads, support non-Steam games, inject into processes, or claim that a Steam continuation changes the modded state on disk.
+Additional references:
+
+- [Architecture and safety boundaries](docs/architecture.md)
+- [Testing guide](docs/testing.md)
+- [Release checklist](docs/release-checklist.md)
+- [Detailed implementation findings](docs/)
+- [Changelog](CHANGELOG.md)
+
+## Contributing
+
+Bug reports and focused pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes. Please report security-sensitive issues according to [SECURITY.md](SECURITY.md).
+
+## License
+
+Vortex Launch Bridge is available under the [MIT License](LICENSE).
+
+Steam, Valve, Nexus Mods, and Vortex are trademarks of their respective owners. This independent project is not affiliated with or endorsed by Valve Corporation or Nexus Mods.

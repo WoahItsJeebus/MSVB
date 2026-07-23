@@ -1,8 +1,16 @@
 {
+	"name": "vortex-launch-bridge",
+	"version": "0.7.15",
+	"description": "A Millennium plugin for coordinating Steam game launches with Vortex-managed profiles.",
+	"private": true,
+	"packageManager": "pnpm@10.34.5",
+	"type": "module",
+	"main": "./frontend/index.jsx",
 	"scripts": {
 		"dev": "millennium-ttc --build dev",
 		"build": "millennium-ttc --build prod",
 		"build:process-shell": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-process-shell.ps1",
+		"test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase6.ps1",
 		"test:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase4.ps1",
 		"test:phase5": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase5.ps1",
 		"test:phase6": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase6.ps1"
@@ -13,12 +21,35 @@
 		"@steambrew/ttc": "^3.2.6",
 		"@steambrew/webkit": "^5.8.4",
 		"@types/react": "19.1.1",
-		"@types/react-dom": "19.1.1"
+		"@types/react-dom": "19.1.1",
+		"typescript": "5.9.3"
 	},
-	"type": "module",
-	"name": "vortex-launch-bridge",
-	"version": "0.7.13",
-	"description": "A Millennium bridge for coordinating Steam game launches with Vortex.",
-	"main": "./frontend/index.jsx",
+	"overrides": {
+		"typescript": "5.9.3"
+	},
+	"pnpm": {
+		"overrides": {
+			"typescript": "5.9.3"
+		}
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"author": "WoahItsJeebus",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/WoahItsJeebus/MSVB.git"
+	},
+	"bugs": {
+		"url": "https://github.com/WoahItsJeebus/MSVB/issues"
+	},
+	"homepage": "https://github.com/WoahItsJeebus/MSVB#readme",
+	"keywords": [
+		"millennium",
+		"steam",
+		"vortex",
+		"mods",
+		"plugin"
+	],
 	"license": "MIT"
 }

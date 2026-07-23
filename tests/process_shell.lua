@@ -6,4 +6,8 @@ local output = pipe:read("*a")
 pipe:close()
 
 assert(output:find(marker, 1, true), "hidden process shell output was missing")
-print("Hidden process shell tests passed")
+if arg[3] == "emit" then
+    io.write(output)
+else
+    print("Hidden process shell tests passed")
+end
