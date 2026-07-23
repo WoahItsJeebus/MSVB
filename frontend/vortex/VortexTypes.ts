@@ -53,6 +53,7 @@ export interface VortexDiscoveredGame {
 	name?: string;
 	path?: string;
 	store?: string;
+	steamAppId?: number;
 	executable?: string;
 	hidden?: boolean;
 	pathSetManually?: boolean;
@@ -251,6 +252,7 @@ function parseDiscoveredGame(value: unknown, index: number): VortexDiscoveredGam
 		name: optionalString(record, 'name', label),
 		path: optionalString(record, 'path', label),
 		store: optionalString(record, 'store', label),
+		steamAppId: optionalNumber(record, 'steamAppId', label),
 		executable: optionalString(record, 'executable', label),
 		hidden: optionalBoolean(record, 'hidden', label),
 		pathSetManually: optionalBoolean(record, 'pathSetManually', label),

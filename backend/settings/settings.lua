@@ -42,6 +42,26 @@ local function copy_map(value)
     return output
 end
 
+local function sanitize_steam_app_id_overrides(value)
+    local output = {}
+    if type(value) ~= "table" then
+        return output
+    end
+
+    for key, item in pairs(value) do
+        local numeric = tonumber(key)
+        if numeric ~= nil and numeric >= 1 and numeric <= 4294967295 and
+            numeric == math.floor(numeric) and type(item) == "string" then
+            local game_id = item:match("^%s*(.-)%s*$")
+            if game_id ~= "" and #game_id <= 256 and
+                game_id:find("%c") == nil then
+                output[string.format("%.0f", numeric)] = game_id
+            end
+        end
+    end
+    return output
+end
+
 local function boolean_or_default(value, default)
     if type(value) == "boolean" then
         return value
@@ -72,7 +92,8 @@ local function sanitize(decoded)
             decoded.diagnosticLogging,
             DEFAULTS.diagnosticLogging
         ),
-        steamAppIdOverrides = copy_map(decoded.steamAppIdOverrides),
+        steamAppIdOverrides =
+            sanitize_steam_app_id_overrides(decoded.steamAppIdOverrides),
     }
 
     settings.vortexActivationTimeoutMs = math.max(
@@ -178,6 +199,52 @@ function M.set_vortex_executable_path(value)
 
     current.vortexExecutablePath = value ~= "" and value or nil
     return save()
+end
+
+local function app_id_key(value)
+    local numeric = tonumber(value)
+    if numeric == nil or numeric < 1 or numeric > 4294967295 or
+        numeric ~= math.floor(numeric) then
+        return nil
+    end
+    return string.format("%.0f", numeric)
+end
+
+function M.get_steam_app_id_override(app_id)
+    ensure_loaded()
+    local key = app_id_key(app_id)
+    if key == nil then
+        return nil
+    end
+    return current.steamAppIdOverrides[key]
+end
+
+function M.set_steam_app_id_override(app_id, vortex_game_id)
+    ensure_loaded()
+    local key = app_id_key(app_id)
+    if key == nil then
+        return false, "Steam AppID must be a positive 32-bit integer"
+    end
+    if type(vortex_game_id) ~= "string" then
+        return false, "Vortex game ID must be a string"
+    end
+
+    local value = vortex_game_id:match("^%s*(.-)%s*$")
+    if #value > 256 or value:find("%c") ~= nil then
+        return false, "Vortex game ID is invalid"
+    end
+
+    local previous = current.steamAppIdOverrides[key]
+    if value == "" then
+        current.steamAppIdOverrides[key] = nil
+    else
+        current.steamAppIdOverrides[key] = value
+    end
+    local saved, save_error = save()
+    if not saved then
+        current.steamAppIdOverrides[key] = previous
+    end
+    return saved, save_error
 end
 
 function M.reload()

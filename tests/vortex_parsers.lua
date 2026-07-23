@@ -39,12 +39,13 @@ local fixture = table.concat({
     'settings.gameMode.discovered.game-a.name = "Example Game"',
     'settings.gameMode.discovered.game-a.path = "D:/Games/Example"',
     'settings.gameMode.discovered.game-a.store = "steam"',
+    "settings.gameMode.discovered.game-a.steamAppId = 1234",
 }, "\n")
 
 local state, metadata = parser.parse(fixture)
 assert(metadata.format == "assignments")
-assert(metadata.assignmentCount == 8)
-assert(metadata.jsonValueCount == 8)
+assert(metadata.assignmentCount == 9)
+assert(metadata.jsonValueCount == 9)
 assert(metadata.ignoredLineCount == 1)
 
 local stable_profiles, invalid_count = profiles.from_state(state)
@@ -60,6 +61,7 @@ assert(#games == 1)
 assert(games[1].id == "game-a")
 assert(games[1].store == "steam")
 assert(games[1].path == "D:/Games/Example")
+assert(games[1].steamAppId == 1234)
 
 assert(text.is_valid_utf8("plain ASCII"))
 assert(text.is_valid_utf8("\226\156\147"))

@@ -22,6 +22,21 @@ local function optional_string(value)
     return nonempty_string(value) and value or nil
 end
 
+local function steam_app_id(source)
+    local value = source.steamAppId or source.steamAppID
+    if value == nil and type(source.store) == "string" and
+        source.store:lower() == "steam" then
+        value = source.storeId
+    end
+
+    local numeric = tonumber(value)
+    if numeric == nil or numeric < 1 or numeric > 4294967295 or
+        numeric ~= math.floor(numeric) then
+        return nil
+    end
+    return numeric
+end
+
 local function sort_profiles(left, right)
     if left.gameId ~= right.gameId then
         return left.gameId < right.gameId
@@ -113,6 +128,12 @@ function M.discovered_games_from_state(state)
             end
             if type(source.pathSetManually) == "boolean" then
                 game.pathSetManually = source.pathSetManually
+            end
+            local app_id = steam_app_id(source)
+            if app_id ~= nil then
+                -- This field is copied only when Vortex state supplies a real
+                -- Steam/store identifier. It is never derived from the title.
+                game.steamAppId = app_id
             end
 
             games[#games + 1] = game

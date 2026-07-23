@@ -100,13 +100,8 @@ local function add_warning(warnings, warning)
     warnings[#warnings + 1] = warning
 end
 
-function M.get_installation()
-    return detection.detect()
-end
-
-function M.probe()
-    local installation = detection.detect()
-    local result = {
+local function empty_state_result(installation)
+    return {
         ok = false,
         readOnly = true,
         installation = installation,
@@ -114,6 +109,99 @@ function M.probe()
         discoveredGames = empty_array(),
         warnings = empty_array(),
     }
+end
+
+local function read_state(installation)
+    local result = empty_state_result(installation)
+
+    if not installation.found then
+        add_warning(result.warnings, "Vortex is not installed or could not be detected.")
+        return result
+    end
+    if not windows.available then
+        result.error = windows.error or "Windows process APIs are unavailable."
+        add_warning(result.warnings, result.error)
+        return result
+    end
+    if windows.is_process_running("Vortex.exe") then
+        result.stateCommand = {
+            executed = false,
+            label = "read-state",
+            arguments = copy_arguments(STATE_ARGUMENTS),
+            skipReason = "vortex-already-running",
+            wasVortexRunning = true,
+            isVortexRunningAfter = true,
+            startedAnotherInstance = false,
+        }
+        add_warning(
+            result.warnings,
+            "The read-only state query was skipped because Vortex is already running."
+        )
+        return result
+    end
+
+    local state_command = run(
+        installation.executablePath,
+        "read-state",
+        STATE_ARGUMENTS,
+        settings.get().vortexProbeTimeoutMs
+    )
+    result.stateCommand = state_command
+
+    local parsed_state, metadata = state_parser.parse(state_command.stdout)
+    state_command.outputFormat = metadata.format
+    state_command.outputIsJson = metadata.outputIsJson
+    state_command.assignmentCount = metadata.assignmentCount
+    state_command.jsonValueCount = metadata.jsonValueCount
+    state_command.invalidAssignmentCount = metadata.invalidAssignmentCount
+    state_command.ignoredLineCount = metadata.ignoredLineCount
+
+    local stable_profiles, invalid_profile_count = profiles.from_state(parsed_state)
+    result.profiles = stable_profiles
+    result.discoveredGames = profiles.discovered_games_from_state(parsed_state)
+    result.invalidProfileCount = invalid_profile_count
+
+    if metadata.format == "unknown" then
+        add_warning(
+            result.warnings,
+            "Vortex returned no recognized state records; output was retained only by the explicit probe."
+        )
+    elseif metadata.invalidAssignmentCount > 0 then
+        add_warning(
+            result.warnings,
+            "Some Vortex state records contained values that were not valid JSON."
+        )
+    end
+    if invalid_profile_count > 0 then
+        add_warning(
+            result.warnings,
+            "Some Vortex profiles were omitted because required fields were missing."
+        )
+    end
+    if state_command.startedAnotherInstance then
+        add_warning(
+            result.warnings,
+            "The read-only query left a Vortex process running; no further command was attempted."
+        )
+    end
+
+    result.ok = state_command.started == true and
+        state_command.timedOut ~= true and state_command.exitCode == 0 and
+        metadata.format ~= "unknown"
+    return result
+end
+
+function M.get_installation()
+    return detection.detect()
+end
+
+function M.read_state()
+    return read_state(detection.detect())
+end
+
+function M.probe()
+    local installation = detection.detect()
+    local result = empty_state_result(installation)
 
     if not installation.found then
         add_warning(result.warnings, "Vortex is not installed or could not be detected.")
@@ -137,78 +225,27 @@ function M.probe()
         add_warning(result.warnings, "The harmless Vortex version command did not complete successfully.")
     end
 
-    local vortex_running = windows.is_process_running("Vortex.exe")
-    if vortex_running then
-        result.stateCommand = {
-            executed = false,
-            label = "read-state",
-            arguments = copy_arguments(STATE_ARGUMENTS),
-            skipReason = "vortex-already-running",
-            wasVortexRunning = true,
-            isVortexRunningAfter = true,
-            startedAnotherInstance = false,
-        }
-        add_warning(
-            result.warnings,
-            "The read-only state query was skipped because Vortex is already running."
-        )
+    local state_result = read_state(installation)
+    result.stateCommand = state_result.stateCommand
+    result.profiles = state_result.profiles
+    result.discoveredGames = state_result.discoveredGames
+    result.invalidProfileCount = state_result.invalidProfileCount
+    if state_result.error ~= nil then
+        result.error = state_result.error
+    end
+    for _, warning in ipairs(state_result.warnings) do
+        add_warning(result.warnings, warning)
+    end
+
+    if result.stateCommand == nil or result.stateCommand.executed == false then
         result.ok = version_command.started == true and
             version_command.timedOut ~= true and version_command.exitCode == 0
         return result
     end
 
-    local state_command = run(
-        executable,
-        "read-state",
-        STATE_ARGUMENTS,
-        settings.get().vortexProbeTimeoutMs
-    )
-    result.stateCommand = state_command
-
-    local parsed_state, metadata = state_parser.parse(state_command.stdout)
-    state_command.outputFormat = metadata.format
-    state_command.outputIsJson = metadata.outputIsJson
-    state_command.assignmentCount = metadata.assignmentCount
-    state_command.jsonValueCount = metadata.jsonValueCount
-    state_command.invalidAssignmentCount = metadata.invalidAssignmentCount
-    state_command.ignoredLineCount = metadata.ignoredLineCount
-
-    local stable_profiles, invalid_profile_count = profiles.from_state(parsed_state)
-    local discovered_games = profiles.discovered_games_from_state(parsed_state)
-    result.profiles = stable_profiles
-    result.discoveredGames = discovered_games
-    result.invalidProfileCount = invalid_profile_count
-
-    if metadata.format == "unknown" then
-        add_warning(
-            result.warnings,
-            "Vortex returned no recognized state records; stdout and stderr were captured for diagnostics."
-        )
-    elseif metadata.invalidAssignmentCount > 0 then
-        add_warning(
-            result.warnings,
-            "Some Vortex state records contained values that were not valid JSON."
-        )
-    end
-
-    if invalid_profile_count > 0 then
-        add_warning(
-            result.warnings,
-            "Some Vortex profiles were omitted because required fields were missing."
-        )
-    end
-
-    if state_command.startedAnotherInstance then
-        add_warning(
-            result.warnings,
-            "The read-only query left a Vortex process running; no further command was attempted."
-        )
-    end
-
     result.ok = version_command.started == true and
         version_command.timedOut ~= true and version_command.exitCode == 0 and
-        state_command.started == true and state_command.timedOut ~= true and
-        state_command.exitCode == 0
+        state_result.ok
     return result
 end
 

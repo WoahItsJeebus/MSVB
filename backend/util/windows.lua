@@ -682,6 +682,65 @@ local function query_registry_string(key, value_name)
     return value
 end
 
+local function read_registry_string(root, subkey_path, value_name, access)
+    local subkey_path_wide = utf8_to_wide(subkey_path)
+    if subkey_path_wide == nil then
+        return nil
+    end
+
+    local key = ffi.new("VLB_HKEY[1]")
+    local status = advapi32.RegOpenKeyExW(
+        root,
+        subkey_path_wide,
+        0,
+        access,
+        key
+    )
+    if status ~= ERROR_SUCCESS then
+        return nil
+    end
+
+    local value = query_registry_string(key[0], value_name)
+    advapi32.RegCloseKey(key[0])
+    return value
+end
+
+function M.get_steam_install_path()
+    local candidates = {
+        {
+            root = HKEY_CURRENT_USER,
+            path = "SOFTWARE\\Valve\\Steam",
+            value = "SteamPath",
+            access = KEY_READ + KEY_WOW64_64KEY,
+        },
+        {
+            root = HKEY_LOCAL_MACHINE,
+            path = "SOFTWARE\\Valve\\Steam",
+            value = "InstallPath",
+            access = KEY_READ + KEY_WOW64_32KEY,
+        },
+        {
+            root = HKEY_LOCAL_MACHINE,
+            path = "SOFTWARE\\Valve\\Steam",
+            value = "InstallPath",
+            access = KEY_READ + KEY_WOW64_64KEY,
+        },
+    }
+
+    for _, candidate in ipairs(candidates) do
+        local value = read_registry_string(
+            candidate.root,
+            candidate.path,
+            candidate.value,
+            candidate.access
+        )
+        if type(value) == "string" and value ~= "" then
+            return value
+        end
+    end
+    return nil
+end
+
 local function enumerate_uninstall_root(root, access)
     local uninstall_path = utf8_to_wide("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall")
     if uninstall_path == nil then

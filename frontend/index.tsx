@@ -4,10 +4,11 @@ import { getBackendHealth } from './backend/BackendClient';
 import { startLaunchInstrumentation } from './launch/LaunchInstrumentation';
 import type { LaunchInstrumentation } from './launch/LaunchInstrumentation';
 import { log } from './logging/Logger';
+import { GameMatchPanel } from './matching/GameMatchPanel';
 import { VortexProbePanel } from './vortex/VortexProbePanel';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.3.0';
+const PLUGIN_VERSION = '0.4.0';
 
 let activeLoadId = 0;
 let launchInstrumentation: LaunchInstrumentation | undefined;
@@ -70,6 +71,7 @@ export default definePlugin(() => {
 					icon={<IconsModule.Settings />}
 				/>
 				<VortexProbePanel />
+				<GameMatchPanel />
 			</>
 		),
 		onDismount(): void {

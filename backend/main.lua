@@ -2,10 +2,12 @@ local cjson = require("cjson")
 local log = require("logging")
 local millennium = require("millennium")
 local detection = require("vortex.detection")
+local game_matcher = require("matching.game_matcher")
 local settings = require("settings.settings")
+local steam_manifests = require("steam.manifests")
 local vortex_cli = require("vortex.cli")
 
-local PLUGIN_VERSION = "0.3.0"
+local PLUGIN_VERSION = "0.4.0"
 local backend_started_at = os.time()
 
 local function encode_response(value)
@@ -146,6 +148,208 @@ function run_vortex_probe()
     })
 
     return encode_response(probe)
+end
+
+local function app_id_number(value)
+    local numeric = tonumber(value)
+    if numeric == nil or numeric < 1 or numeric > 4294967295 or
+        numeric ~= math.floor(numeric) then
+        return nil
+    end
+    return numeric
+end
+
+local function unresolved_match(app_id, warning)
+    return {
+        matched = false,
+        confidence = "none",
+        steamAppId = app_id,
+        profiles = {},
+        warning = warning,
+    }
+end
+
+function resolve_steam_installation(steam_app_id, client_library_paths_json)
+    local library_hints =
+        steam_manifests.decode_library_hints(client_library_paths_json)
+    local resolve_ok, result = pcall(
+        steam_manifests.resolve,
+        steam_app_id,
+        library_hints
+    )
+    if not resolve_ok then
+        local app_id = app_id_number(steam_app_id)
+        log.error("steam.installation.resolve_failed", {
+            steamAppId = app_id,
+            clientHintCount = #library_hints,
+            pathsRedacted = true,
+        })
+        return encode_response({
+            resolved = false,
+            steamAppId = app_id,
+            source = "none",
+            warning = "Steam installation resolution failed.",
+        })
+    end
+
+    log.info("steam.installation.resolved", {
+        resolved = result.resolved == true,
+        steamAppId = result.steamAppId,
+        source = result.source,
+        candidateCount = result.candidateCount,
+        clientHintCount = #library_hints,
+        installPathRedacted = result.installPath ~= nil,
+    })
+    return encode_response(result)
+end
+
+function get_steam_app_id_override(steam_app_id)
+    local app_id = app_id_number(steam_app_id)
+    if app_id == nil then
+        return encode_response({
+            ok = false,
+            error = "Steam AppID must be a positive 32-bit integer.",
+        })
+    end
+
+    local result = {
+        ok = true,
+        steamAppId = app_id,
+    }
+    local configured = settings.get_steam_app_id_override(app_id)
+    if configured ~= nil then
+        result.vortexGameId = configured
+    end
+    return encode_response(result)
+end
+
+function set_steam_app_id_override(steam_app_id, vortex_game_id)
+    local app_id = app_id_number(steam_app_id)
+    if app_id == nil or type(vortex_game_id) ~= "string" then
+        return encode_response({
+            ok = false,
+            error = "A valid Steam AppID and Vortex game ID are required.",
+        })
+    end
+
+    local saved, save_error =
+        settings.set_steam_app_id_override(app_id, vortex_game_id)
+    if not saved then
+        log.error("matching.override.save_failed", {
+            steamAppId = app_id,
+        })
+        return encode_response({
+            ok = false,
+            error = save_error or "The game mapping could not be saved.",
+        })
+    end
+
+    local configured = settings.get_steam_app_id_override(app_id)
+    log.info("matching.override.saved", {
+        steamAppId = app_id,
+        configured = configured ~= nil,
+        vortexGameIdRedacted = configured ~= nil,
+    })
+
+    local result = {
+        ok = true,
+        steamAppId = app_id,
+    }
+    if configured ~= nil then
+        result.vortexGameId = configured
+    end
+    return encode_response(result)
+end
+
+function match_vortex_game(
+    steam_app_id,
+    client_library_paths_json,
+    steam_executable_path
+)
+    local app_id = app_id_number(steam_app_id)
+    if app_id == nil then
+        return encode_response(unresolved_match(
+            app_id,
+            "Steam AppID must be a positive 32-bit integer."
+        ))
+    end
+
+    local library_hints =
+        steam_manifests.decode_library_hints(client_library_paths_json)
+    local steam_ok, steam_result = pcall(
+        steam_manifests.resolve,
+        app_id,
+        library_hints
+    )
+    if not steam_ok or steam_result.resolved ~= true then
+        local warning = steam_ok and steam_result.warning or
+            "Steam installation resolution failed."
+        local result = unresolved_match(app_id, warning)
+        result.steamSource = steam_ok and steam_result.source or "none"
+        log.warn("matching.completed", {
+            matched = false,
+            confidence = "none",
+            steamAppId = app_id,
+            steamSource = result.steamSource,
+            failureStage = "steam-resolution",
+            pathsRedacted = true,
+        })
+        return encode_response(result)
+    end
+
+    local state_ok, state = pcall(vortex_cli.read_state)
+    if not state_ok or state.ok ~= true then
+        local warning = "Vortex discovered-game state could not be read."
+        if state_ok and type(state.warnings) == "table" and
+            type(state.warnings[1]) == "string" then
+            warning = state.warnings[1]
+        end
+        local result = unresolved_match(app_id, warning)
+        result.steamInstallPath = steam_result.installPath
+        result.steamSource = steam_result.source
+        log.warn("matching.completed", {
+            matched = false,
+            confidence = "none",
+            steamAppId = app_id,
+            steamSource = steam_result.source,
+            failureStage = "vortex-state",
+            installPathRedacted = true,
+        })
+        return encode_response(result)
+    end
+
+    local executable_path
+    if type(steam_executable_path) == "string" and
+        #steam_executable_path <= 32767 then
+        executable_path = steam_executable_path
+    end
+
+    local match_ok, result = pcall(game_matcher.match, {
+        steam_app_id = app_id,
+        steam_install_path = steam_result.installPath,
+        steam_executable_path = executable_path,
+        override_game_id = settings.get_steam_app_id_override(app_id),
+        discovered_games = state.discoveredGames,
+        profiles = state.profiles,
+    })
+    if not match_ok then
+        result = unresolved_match(app_id, "Vortex game matching failed.")
+        result.steamInstallPath = steam_result.installPath
+    end
+    result.steamSource = steam_result.source
+
+    log.info("matching.completed", {
+        matched = result.matched == true,
+        confidence = result.confidence,
+        steamAppId = app_id,
+        steamSource = steam_result.source,
+        profileCount = type(result.profiles) == "table" and
+            #result.profiles or 0,
+        installPathRedacted = true,
+        vortexGamePathRedacted = result.vortexGamePath ~= nil,
+        vortexGameIdRedacted = result.vortexGameId ~= nil,
+    })
+    return encode_response(result)
 end
 
 local function on_load()
