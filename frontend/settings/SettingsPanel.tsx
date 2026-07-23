@@ -3,6 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { log, setDiagnosticLogging } from '../logging/Logger';
 import {
+	fullWidthControlStyle,
+	ResponsiveActionRow,
+	ResponsiveControlGroup,
+	responsiveButtonStyle,
+} from '../ui/ResponsiveControls';
+import {
 	clearRememberedChoices,
 	getGameLaunchSettings,
 	getPluginSettings,
@@ -31,19 +37,20 @@ export function SettingsPanel() {
 	const [appIdText, setAppIdText] = useState('');
 	const [game, setGame] = useState<GameLaunchSettings>();
 	const [busy, setBusy] = useState<BusyOperation>();
-	const [status, setStatus] = useState<string>();
+	const [generalStatus, setGeneralStatus] = useState<string>();
+	const [gameStatus, setGameStatus] = useState<string>();
 	const appId = parseAppId(appIdText);
 
 	const loadGeneral = useCallback(async (): Promise<void> => {
 		setBusy('load-general');
-		setStatus(undefined);
+		setGeneralStatus(undefined);
 		try {
 			const loaded = await getPluginSettings();
 			setGeneral(loaded);
 			setTimeoutSeconds(String(loaded.vortexActivationTimeoutMs / 1_000));
 			setDiagnosticLogging(loaded.diagnosticLogging);
 		} catch (error: unknown) {
-			setStatus(errorText(error));
+			setGeneralStatus(errorText(error));
 			log.error('settings.general.load_failed', error);
 		} finally {
 			setBusy(undefined);
@@ -60,12 +67,12 @@ export function SettingsPanel() {
 		}
 		const seconds = Number(timeoutSeconds);
 		if (!Number.isInteger(seconds) || seconds < 1 || seconds > 300) {
-			setStatus('Vortex activation timeout must be a whole number from 1 to 300 seconds.');
+			setGeneralStatus('Vortex activation timeout must be a whole number from 1 to 300 seconds.');
 			return;
 		}
 
 		setBusy('save-general');
-		setStatus(undefined);
+		setGeneralStatus(undefined);
 		try {
 			const saved = await updatePluginSettings({
 				...general,
@@ -74,9 +81,9 @@ export function SettingsPanel() {
 			setGeneral(saved);
 			setTimeoutSeconds(String(saved.vortexActivationTimeoutMs / 1_000));
 			setDiagnosticLogging(saved.diagnosticLogging);
-			setStatus('General launch settings saved.');
+			setGeneralStatus('General launch settings saved.');
 		} catch (error: unknown) {
-			setStatus(errorText(error));
+			setGeneralStatus(errorText(error));
 			log.error('settings.general.save_failed', error);
 		} finally {
 			setBusy(undefined);
@@ -85,7 +92,7 @@ export function SettingsPanel() {
 
 	const clearChoices = async (): Promise<void> => {
 		setBusy('clear');
-		setStatus(undefined);
+		setGeneralStatus(undefined);
 		try {
 			await clearRememberedChoices();
 			setGame((current) =>
@@ -93,9 +100,9 @@ export function SettingsPanel() {
 					? current
 					: { ...current, rememberedChoice: undefined },
 			);
-			setStatus('Remembered launch choices cleared.');
+			setGeneralStatus('Remembered launch choices cleared.');
 		} catch (error: unknown) {
-			setStatus(errorText(error));
+			setGeneralStatus(errorText(error));
 			log.error('settings.remembered_choices.clear_failed', error);
 		} finally {
 			setBusy(undefined);
@@ -104,21 +111,21 @@ export function SettingsPanel() {
 
 	const loadGame = async (): Promise<void> => {
 		if (appId === undefined) {
-			setStatus('Steam AppID must be a positive 32-bit integer.');
+			setGameStatus('Steam AppID must be a positive 32-bit integer.');
 			return;
 		}
 		setBusy('load-game');
-		setStatus(undefined);
+		setGameStatus(undefined);
 		try {
 			const loaded = await getGameLaunchSettings(appId);
 			setGame(loaded);
-			setStatus(
+			setGameStatus(
 				loaded.rememberedChoice === undefined
 					? 'Per-game launch settings loaded; no launch choice is remembered.'
 					: `Per-game launch settings loaded; ${loaded.rememberedChoice} is remembered.`,
 			);
 		} catch (error: unknown) {
-			setStatus(errorText(error));
+			setGameStatus(errorText(error));
 			log.error('settings.game.load_failed', error, { steamAppId: appId });
 		} finally {
 			setBusy(undefined);
@@ -127,15 +134,15 @@ export function SettingsPanel() {
 
 	const saveGame = async (): Promise<void> => {
 		if (appId === undefined || game === undefined || game.steamAppId !== appId) {
-			setStatus('Load per-game settings for this Steam AppID before saving.');
+			setGameStatus('Load per-game settings for this Steam AppID before saving.');
 			return;
 		}
 		setBusy('save-game');
-		setStatus(undefined);
+		setGameStatus(undefined);
 		try {
 			const saved = await setGameLaunchSettings(game);
 			setGame(saved);
-			setStatus('Per-game launch settings saved.');
+			setGameStatus('Per-game launch settings saved.');
 			log.info('settings.game.ui_saved', {
 				steamAppId: appId,
 				preferredLaunchTarget: saved.preferredLaunchTarget,
@@ -144,7 +151,7 @@ export function SettingsPanel() {
 				customArgumentsRedacted: saved.customArguments.length > 0,
 			});
 		} catch (error: unknown) {
-			setStatus(errorText(error));
+			setGameStatus(errorText(error));
 			log.error('settings.game.ui_save_failed', error, { steamAppId: appId });
 		} finally {
 			setBusy(undefined);
@@ -186,113 +193,138 @@ export function SettingsPanel() {
 			/>
 			<Field
 				label="Vortex activation timeout (seconds)"
-				description={status ?? 'Allowed range: 1 to 300 seconds.'}
+				description={generalStatus ?? 'Allowed range: 1 to 300 seconds.'}
 				childrenLayout="below"
 			>
-				<TextField
-					value={timeoutSeconds}
-					disabled={general === undefined || busy !== undefined}
-					mustBeNumeric
-					onChange={(event) => setTimeoutSeconds(event.currentTarget.value.trim())}
-				/>
-				<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-					<DialogButton
+				<ResponsiveControlGroup>
+					<TextField
+						value={timeoutSeconds}
 						disabled={general === undefined || busy !== undefined}
-						onClick={() => void saveGeneral()}
-					>
-						{busy === 'save-general' ? 'Saving...' : 'Save general settings'}
-					</DialogButton>
-					<DialogButton disabled={busy !== undefined} onClick={() => void clearChoices()}>
-						{busy === 'clear' ? 'Clearing...' : 'Clear remembered choices'}
-					</DialogButton>
-				</div>
+						mustBeNumeric
+						style={fullWidthControlStyle}
+						onChange={(event) => setTimeoutSeconds(event.currentTarget.value.trim())}
+					/>
+					<ResponsiveActionRow>
+						<DialogButton
+							disabled={general === undefined || busy !== undefined}
+							onClick={() => void saveGeneral()}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'save-general' ? 'Saving...' : 'Save general settings'}
+						</DialogButton>
+						<DialogButton
+							disabled={busy !== undefined}
+							onClick={() => void clearChoices()}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'clear' ? 'Clearing...' : 'Clear remembered choices'}
+						</DialogButton>
+					</ResponsiveActionRow>
+				</ResponsiveControlGroup>
 			</Field>
 			<Field
 				label="Per-game profile and launch tool"
-				description="Enter a Steam AppID, then load its settings. Profile IDs must match Vortex's stable profile ID exactly."
-				childrenLayout="below"
-			>
-				<TextField
-					value={appIdText}
-					disabled={busy !== undefined}
-					onChange={(event) => {
-						setAppIdText(event.currentTarget.value.trim());
-						setGame(undefined);
-						setStatus(undefined);
-					}}
-				/>
-				<DialogButton
-					disabled={busy !== undefined || appId === undefined}
-					onClick={() => void loadGame()}
-					style={{ marginTop: '8px' }}
-				>
-					{busy === 'load-game' ? 'Loading...' : 'Load per-game settings'}
-				</DialogButton>
-			</Field>
-			<Field label="Preferred Vortex profile ID" childrenLayout="below">
-				<TextField
-					value={game?.preferredProfileId ?? ''}
-					disabled={game === undefined || busy !== undefined}
-					onChange={(event) =>
-						setGame((current) =>
-							current === undefined
-								? current
-								: { ...current, preferredProfileId: event.currentTarget.value },
-						)
-					}
-				/>
-			</Field>
-			<ToggleField
-				label="Use a custom executable after Vortex activation"
-				description="Off replays the exact preserved Steam request. On starts the configured executable directly."
-				checked={game?.preferredLaunchTarget === 'custom'}
-				disabled={game === undefined || busy !== undefined}
-				onChange={(checked) =>
-					setGame((current) =>
-						current === undefined
-							? current
-							: { ...current, preferredLaunchTarget: checked ? 'custom' : 'steam' },
-					)
+				description={
+					gameStatus ??
+					"Enter a Steam AppID, then load its settings. Profile IDs must match Vortex's stable profile ID exactly."
 				}
-			/>
-			<Field label="Custom executable (.exe)" childrenLayout="below">
-				<TextField
-					value={game?.customExecutable ?? ''}
-					disabled={game === undefined || busy !== undefined}
-					onChange={(event) =>
-						setGame((current) =>
-							current === undefined
-								? current
-								: { ...current, customExecutable: event.currentTarget.value },
-						)
-					}
-				/>
-			</Field>
-			<Field
-				label="Custom arguments"
-				description="Arguments are parsed without a command shell; paths and values containing spaces can be quoted."
 				childrenLayout="below"
-				bottomSeparator="none"
 			>
-				<TextField
-					value={game?.customArguments ?? ''}
-					disabled={game === undefined || busy !== undefined}
-					onChange={(event) =>
-						setGame((current) =>
-							current === undefined
-								? current
-								: { ...current, customArguments: event.currentTarget.value },
-						)
-					}
-				/>
-				<DialogButton
-					disabled={game === undefined || busy !== undefined}
-					onClick={() => void saveGame()}
-					style={{ marginTop: '8px' }}
-				>
-					{busy === 'save-game' ? 'Saving...' : 'Save per-game settings'}
-				</DialogButton>
+				<ResponsiveControlGroup>
+					<TextField
+						value={appIdText}
+						disabled={busy !== undefined}
+						style={fullWidthControlStyle}
+						onChange={(event) => {
+							setAppIdText(event.currentTarget.value.trim());
+							setGame(undefined);
+							setGameStatus(undefined);
+						}}
+					/>
+					<ResponsiveActionRow>
+						<DialogButton
+							disabled={busy !== undefined || appId === undefined}
+							onClick={() => void loadGame()}
+						>
+							{busy === 'load-game' ? 'Loading...' : 'Load per-game settings'}
+						</DialogButton>
+					</ResponsiveActionRow>
+				</ResponsiveControlGroup>
 			</Field>
+			{game === undefined ? null : (
+				<>
+					<Field label="Preferred Vortex profile ID" childrenLayout="below">
+						<TextField
+							value={game.preferredProfileId ?? ''}
+							disabled={busy !== undefined}
+							style={fullWidthControlStyle}
+							onChange={(event) =>
+								setGame((current) =>
+									current === undefined
+										? current
+										: { ...current, preferredProfileId: event.currentTarget.value },
+								)
+							}
+						/>
+					</Field>
+					<ToggleField
+						label="Use a custom executable after Vortex activation"
+						description="Off replays the exact preserved Steam request. On starts the configured executable directly."
+						checked={game.preferredLaunchTarget === 'custom'}
+						disabled={busy !== undefined}
+						onChange={(checked) =>
+							setGame((current) =>
+								current === undefined
+									? current
+									: { ...current, preferredLaunchTarget: checked ? 'custom' : 'steam' },
+							)
+						}
+					/>
+					<Field label="Custom executable (.exe)" childrenLayout="below">
+						<TextField
+							value={game.customExecutable ?? ''}
+							disabled={busy !== undefined}
+							style={fullWidthControlStyle}
+							onChange={(event) =>
+								setGame((current) =>
+									current === undefined
+										? current
+										: { ...current, customExecutable: event.currentTarget.value },
+								)
+							}
+						/>
+					</Field>
+					<Field
+						label="Custom arguments"
+						description="Arguments are parsed without a command shell; paths and values containing spaces can be quoted."
+						childrenLayout="below"
+						bottomSeparator="none"
+					>
+						<ResponsiveControlGroup>
+							<TextField
+								value={game.customArguments}
+								disabled={busy !== undefined}
+								style={fullWidthControlStyle}
+								onChange={(event) =>
+									setGame((current) =>
+										current === undefined
+											? current
+											: { ...current, customArguments: event.currentTarget.value },
+									)
+								}
+							/>
+							<ResponsiveActionRow>
+								<DialogButton
+									disabled={busy !== undefined}
+									onClick={() => void saveGame()}
+								>
+									{busy === 'save-game' ? 'Saving...' : 'Save per-game settings'}
+								</DialogButton>
+							</ResponsiveActionRow>
+						</ResponsiveControlGroup>
+					</Field>
+				</>
+			)}
 		</>
 	);
 }

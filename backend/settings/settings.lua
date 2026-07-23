@@ -1,7 +1,8 @@
-local cjson = require("cjson")
 local fs = require("fs")
 local utils = require("utils")
 local command_line = require("util.command_line")
+local json_decode = require("util.json_decode")
+local json_encode = require("util.json_encode")
 
 local M = {}
 
@@ -179,7 +180,7 @@ local function load()
         return sanitize({})
     end
 
-    local decoded_ok, decoded = pcall(cjson.decode, contents)
+    local decoded_ok, decoded = pcall(json_decode.decode, contents)
     if not decoded_ok then
         return sanitize({})
     end
@@ -204,7 +205,7 @@ local function save()
         return false, tostring(directory_error or "could not create settings directory")
     end
 
-    local encoded_ok, encoded = pcall(cjson.encode, current)
+    local encoded_ok, encoded = pcall(json_encode.encode, current)
     if not encoded_ok then
         return false, "could not encode settings"
     end

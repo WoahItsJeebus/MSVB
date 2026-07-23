@@ -1,18 +1,25 @@
 import { definePlugin, Field, IconsModule } from '@steambrew/client';
 
-import { getBackendHealth } from './backend/BackendClient';
+import {
+	forwardFrontendLog,
+	getBackendHealth,
+	verifyBackendProcessBridge,
+	verifyBackendRpcTransport,
+} from './backend/BackendClient';
 import { startLaunchInterception } from './launch/LaunchInterceptor';
 import type { LaunchInterception } from './launch/LaunchInterceptor';
 import { startLaunchInstrumentation } from './launch/LaunchInstrumentation';
 import type { LaunchInstrumentation } from './launch/LaunchInstrumentation';
-import { log, setDiagnosticLogging } from './logging/Logger';
+import { log, setBackendLogSink, setDiagnosticLogging } from './logging/Logger';
 import { GameMatchPanel } from './matching/GameMatchPanel';
 import { getPluginSettings } from './settings/SettingsClient';
 import { SettingsPanel } from './settings/SettingsPanel';
 import { VortexProbePanel } from './vortex/VortexProbePanel';
+import { warmVortexStateCache } from './vortex/VortexClient';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.7.0';
+const PLUGIN_VERSION = '0.7.13';
+const VORTEX_CACHE_REFRESH_INTERVAL_MS = 5 * 60 * 1_000;
 
 let activeLoadId = 0;
 let launchInterception: LaunchInterception | undefined;
@@ -29,6 +36,15 @@ async function verifyBackend(loadId: number): Promise<boolean> {
 			throw new Error(`Backend version ${health.pluginVersion} does not match frontend version ${PLUGIN_VERSION}.`);
 		}
 
+		await verifyBackendRpcTransport(`${PLUGIN_VERSION}:${loadId}`);
+		if (loadId !== activeLoadId) {
+			return false;
+		}
+		await verifyBackendProcessBridge();
+		if (loadId !== activeLoadId) {
+			return false;
+		}
+
 		log.info('backend.health.ok', {
 			platform: health.platform,
 			architecture: health.architecture,
@@ -36,6 +52,15 @@ async function verifyBackend(loadId: number): Promise<boolean> {
 			millenniumVersion: health.millenniumVersion,
 			backendStartedAt: health.backendStartedAt,
 		});
+		log.info('backend.rpc_transport.ok', {
+			pluginVersion: health.pluginVersion,
+			singleJsonEnvelope: true,
+		});
+		log.info('backend.process_bridge.ok', {
+			pluginVersion: health.pluginVersion,
+			ffiCalls: false,
+		});
+		setBackendLogSink(forwardFrontendLog);
 		return true;
 	} catch (error: unknown) {
 		if (loadId === activeLoadId) {
@@ -58,6 +83,42 @@ export default definePlugin(() => {
 
 	let interception: LaunchInterception | undefined;
 	let instrumentation: LaunchInstrumentation | undefined;
+	let cacheRefreshTimer: number | undefined;
+	let cacheRefreshInFlight = false;
+	const refreshVortexCache = async (trigger: 'startup' | 'interval'): Promise<void> => {
+		if (cacheRefreshInFlight || loadId !== activeLoadId) {
+			return;
+		}
+		cacheRefreshInFlight = true;
+		log.info('vortex.cache.refresh_started', { trigger });
+		try {
+			const result = await warmVortexStateCache();
+			if (loadId !== activeLoadId) {
+				return;
+			}
+			if (result.ok) {
+				log.info('vortex.cache.refresh_completed', {
+					trigger,
+					durationMs: result.durationMs,
+					profileCount: result.profileCount,
+					discoveredGameCount: result.discoveredGameCount,
+				});
+			} else {
+				log.warn('vortex.cache.refresh_failed', {
+					trigger,
+					cacheAvailable: result.cacheAvailable,
+					durationMs: result.durationMs,
+					error: result.error,
+				});
+			}
+		} catch (error: unknown) {
+			if (loadId === activeLoadId) {
+				log.error('vortex.cache.refresh_bridge_failed', error, { trigger });
+			}
+		} finally {
+			cacheRefreshInFlight = false;
+		}
+	};
 	void verifyBackend(loadId).then(async (backendHealthy) => {
 		if (!backendHealthy || loadId !== activeLoadId) {
 			return;
@@ -77,6 +138,10 @@ export default definePlugin(() => {
 		launchInstrumentation = instrumentation;
 		interception = startLaunchInterception();
 		launchInterception = interception;
+		void refreshVortexCache('startup');
+		cacheRefreshTimer = window.setInterval(() => {
+			void refreshVortexCache('interval');
+		}, VORTEX_CACHE_REFRESH_INTERVAL_MS);
 	});
 
 	return {
@@ -96,6 +161,11 @@ export default definePlugin(() => {
 			</>
 		),
 		onDismount(): void {
+			if (cacheRefreshTimer !== undefined) {
+				window.clearInterval(cacheRefreshTimer);
+				cacheRefreshTimer = undefined;
+			}
+			setBackendLogSink(undefined);
 			interception?.stop();
 			if (launchInterception === interception) {
 				launchInterception = undefined;

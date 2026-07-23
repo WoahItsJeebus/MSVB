@@ -2,6 +2,7 @@ local fs = require("fs")
 local path = require("util.path")
 local vdf = require("steam.vdf")
 local windows = require("util.windows")
+local json_decode = require("util.json_decode")
 
 local M = {}
 
@@ -9,11 +10,7 @@ local MAXIMUM_FILE_BYTES = 2 * 1024 * 1024
 local MAXIMUM_LIBRARY_HINTS = 32
 
 local function empty_array()
-    local decoded_ok, decoded = pcall(require("cjson").decode, "[]")
-    if decoded_ok then
-        return decoded
-    end
-    return {}
+    return json_decode.empty_array()
 end
 
 local function normalize_app_id(value)
@@ -258,7 +255,7 @@ function M.decode_library_hints(value)
         return empty_array()
     end
 
-    local decoded_ok, decoded = pcall(require("cjson").decode, value)
+    local decoded_ok, decoded = pcall(json_decode.decode, value)
     if not decoded_ok or type(decoded) ~= "table" then
         return empty_array()
     end

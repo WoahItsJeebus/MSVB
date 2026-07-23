@@ -4,6 +4,7 @@ local settings = require("settings.settings")
 local state_parser = require("vortex.state_parser")
 local text = require("util.text")
 local windows = require("util.windows")
+local json_decode = require("util.json_decode")
 
 local M = {}
 
@@ -19,11 +20,7 @@ local STATE_ARGUMENTS = {
 }
 
 local function empty_array()
-    local decoded_ok, decoded = pcall(require("cjson").decode, "[]")
-    if decoded_ok then
-        return decoded
-    end
-    return {}
+    return json_decode.empty_array()
 end
 
 local function copy_arguments(arguments)

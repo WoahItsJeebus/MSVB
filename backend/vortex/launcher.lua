@@ -1,14 +1,17 @@
-local cjson = require("cjson")
 local detection = require("vortex.detection")
 local fs = require("fs")
 local settings = require("settings.settings")
 local utils = require("utils")
+local json_encode = require("util.json_encode")
 local windows = require("util.windows")
 
 local M = {}
 
 local PROCESS_NAME = "Vortex.exe"
-local POLL_INTERVAL_MS = 100
+-- Process waits are isolated from LuaJIT FFI through the packaged process
+-- bridge. Poll once per second to avoid repeatedly starting the bridge while
+-- Vortex completes activation.
+local POLL_INTERVAL_MS = 1000
 local MAXIMUM_READ_BYTES = 256 * 1024
 local READINESS_SIGNAL = "vortex-log-profile-switch"
 
@@ -58,7 +61,7 @@ local function new_cursor(path)
 end
 
 local function quoted_json_value(value)
-    local encoded_ok, encoded = pcall(cjson.encode, value)
+    local encoded_ok, encoded = pcall(json_encode.encode, value)
     if not encoded_ok or type(encoded) ~= "string" then
         return nil
     end

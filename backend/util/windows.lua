@@ -1,4 +1,8 @@
 local M = {}
+local fs
+local json_decode
+local json_encode
+local utils
 
 local ffi_ok, ffi = pcall(require, "ffi")
 if not ffi_ok or type(ffi) ~= "table" then
@@ -187,6 +191,10 @@ if not kernel32_ok or not advapi32_ok then
 end
 
 M.available = true
+fs = require("fs")
+json_decode = require("util.json_decode")
+json_encode = require("util.json_encode")
+utils = require("utils")
 
 local CP_UTF8 = 65001
 local CREATE_NO_WINDOW = 0x08000000
@@ -328,6 +336,127 @@ local function quote_windows_argument(value)
     end
     output[#output + 1] = '"'
     return table.concat(output)
+end
+
+local bridge_sequence = 0
+
+local function process_bridge_request(request)
+    local local_app_data = utils.getenv("LOCALAPPDATA")
+    local windows_directory = utils.getenv("WINDIR")
+    local backend_directory =
+        rawget(_G, "MILLENNIUM_PLUGIN_SECRET_BACKEND_ABSOLUTE")
+    if type(local_app_data) ~= "string" or local_app_data == "" or
+        type(windows_directory) ~= "string" or windows_directory == "" or
+        type(backend_directory) ~= "string" or backend_directory == "" then
+        return nil, "The process bridge environment is unavailable"
+    end
+
+    local bridge_directory = fs.join(
+        fs.join(local_app_data, "VortexLaunchBridge"),
+        "ProcessBridge"
+    )
+    local directory_ok, directory_error =
+        fs.create_directories(bridge_directory)
+    if not directory_ok and not fs.is_directory(bridge_directory) then
+        return nil, tostring(directory_error or
+            "The process bridge directory could not be created")
+    end
+
+    bridge_sequence = bridge_sequence + 1
+    local request_path = fs.join(
+        bridge_directory,
+        string.format("request-%d-%d.json", os.time(), bridge_sequence)
+    )
+    local encoded_ok, encoded = pcall(json_encode.encode, request)
+    if not encoded_ok then
+        return nil, "The process bridge request could not be encoded"
+    end
+
+    local request_file, open_error = io.open(request_path, "wb")
+    if request_file == nil then
+        return nil, tostring(open_error or
+            "The process bridge request could not be opened")
+    end
+    local write_ok, write_error = request_file:write(encoded)
+    local close_ok, close_error = request_file:close()
+    if not write_ok or not close_ok then
+        os.remove(request_path)
+        return nil, tostring(write_error or close_error or
+            "The process bridge request could not be written")
+    end
+
+    local powershell_path = fs.join(
+        fs.join(
+            fs.join(
+                fs.join(windows_directory, "System32"),
+                "WindowsPowerShell"
+            ),
+            "v1.0"
+        ),
+        "powershell.exe"
+    )
+    local runner_path = fs.join(
+        fs.join(backend_directory, "util"),
+        "process_runner.ps1"
+    )
+    local process_shell_path = fs.join(
+        fs.join(backend_directory, "util"),
+        "process_shell.exe"
+    )
+    if not fs.is_file(powershell_path) or not fs.is_file(runner_path) or
+        not fs.is_file(process_shell_path) then
+        os.remove(request_path)
+        return nil, "The packaged process bridge is unavailable"
+    end
+
+    -- Lua's popen always routes through ComSpec. Temporarily point this plugin
+    -- process at the packaged Windows-subsystem broker so neither the command
+    -- interpreter nor PowerShell receives a visible console window. Requested
+    -- executables and arguments remain JSON data launched by ProcessStartInfo.
+    local command = table.concat({
+        quote_windows_argument(powershell_path),
+        "-WindowStyle",
+        "Hidden",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        quote_windows_argument(runner_path),
+        "-RequestPath",
+        quote_windows_argument(request_path),
+    }, " ")
+    local original_command_processor = utils.getenv("ComSpec")
+    local shell_set_ok, shell_set = pcall(
+        utils.setenv,
+        "ComSpec",
+        process_shell_path
+    )
+    if not shell_set_ok or shell_set ~= true then
+        os.remove(request_path)
+        return nil, "The hidden process shell could not be selected"
+    end
+
+    local pipe, pipe_error = io.popen(command, "r")
+    if type(original_command_processor) == "string" and
+        original_command_processor ~= "" then
+        pcall(utils.setenv, "ComSpec", original_command_processor)
+    end
+    if pipe == nil then
+        os.remove(request_path)
+        return nil, tostring(pipe_error or
+            "The process bridge could not be started")
+    end
+
+    local output = pipe:read("*a")
+    pipe:close()
+    os.remove(request_path)
+    local decoded_ok, response = pcall(json_decode.decode, output)
+    if not decoded_ok or type(response) ~= "table" then
+        return nil, "The process bridge returned an invalid response"
+    end
+    return response
 end
 
 local function create_pipe(parent_end)
@@ -921,6 +1050,173 @@ function M.get_vortex_uninstall_entries()
     end
 
     return results
+end
+
+-- Millennium 3.3.1's LuaJIT FFI path can leave the host's nonvolatile R15
+-- register clobbered after Win32 calls, causing handle_evaluate to write its
+-- JSON return value through the module base address. All operating-system
+-- calls therefore use Millennium's native utility module plus the packaged
+-- hidden PowerShell/.NET runner. None of the overrides below call FFI.
+function M.run_process(executable, arguments, options)
+    options = options or {}
+    arguments = arguments or {}
+    if type(executable) ~= "string" or executable == "" then
+        return {
+            started = false,
+            error = "Executable path is empty",
+        }
+    end
+    for _, argument in ipairs(arguments) do
+        if type(argument) ~= "string" then
+            return {
+                started = false,
+                error = "Process arguments must be strings",
+            }
+        end
+    end
+
+    local response, bridge_error = process_bridge_request({
+        operation = "process",
+        executable = executable,
+        arguments = arguments,
+        capture = true,
+        timeout_ms = tonumber(options.timeout_ms) or 10000,
+        maximum_output_bytes =
+            tonumber(options.maximum_output_bytes) or (1024 * 1024),
+    })
+    if response == nil then
+        return {
+            started = false,
+            error = bridge_error,
+        }
+    end
+    return response
+end
+
+function M.start_process(executable, arguments)
+    arguments = arguments or {}
+    if type(executable) ~= "string" or executable == "" then
+        return {
+            started = false,
+            error = "Executable path is empty",
+        }
+    end
+    for _, argument in ipairs(arguments) do
+        if type(argument) ~= "string" then
+            return {
+                started = false,
+                error = "Process arguments must be strings",
+            }
+        end
+    end
+
+    local response, bridge_error = process_bridge_request({
+        operation = "process",
+        executable = executable,
+        arguments = arguments,
+        capture = false,
+        timeout_ms = 10000,
+        maximum_output_bytes = 4096,
+    })
+    if response == nil then
+        return {
+            started = false,
+            error = bridge_error,
+        }
+    end
+    return response
+end
+
+function M.monotonic_milliseconds()
+    local read_ok, value = pcall(utils.time_ms)
+    if read_ok and type(value) == "number" then
+        return value
+    end
+    return os.time() * 1000
+end
+
+function M.sleep(milliseconds)
+    local duration = tonumber(milliseconds) or 0
+    duration = math.max(0, math.min(math.floor(duration), 1000))
+    pcall(utils.sleep, duration)
+end
+
+function M.is_process_running(executable_name)
+    if type(executable_name) ~= "string" or
+        executable_name:match("^[A-Za-z0-9%._%-]+%.exe$") == nil then
+        return false
+    end
+
+    local response = process_bridge_request({
+        operation = "is_running",
+        executable_name = executable_name,
+    })
+    return response ~= nil and response.ok == true and
+        response.running == true
+end
+
+function M.get_steam_install_path()
+    local response = process_bridge_request({
+        operation = "get_steam_install_path",
+    })
+    if response ~= nil and response.ok == true and
+        type(response.path) == "string" and response.path ~= "" then
+        return response.path
+    end
+    return nil
+end
+
+function M.get_vortex_uninstall_entries()
+    local response = process_bridge_request({
+        operation = "get_vortex_uninstall_entries",
+    })
+    if response ~= nil and response.ok == true and
+        type(response.entries) == "table" then
+        return response.entries
+    end
+    return {}
+end
+
+function M.verify_process_bridge()
+    local windows_directory = utils.getenv("WINDIR")
+    local command_processor = type(windows_directory) == "string" and
+        fs.join(fs.join(windows_directory, "System32"), "cmd.exe") or nil
+    if type(command_processor) ~= "string" or
+        not fs.is_file(command_processor) then
+        return {
+            ok = false,
+            error = "The Windows command processor is unavailable.",
+        }
+    end
+
+    local result = M.run_process(
+        command_processor,
+        { "/d", "/c", "echo VLB_PROCESS_BRIDGE_OK" },
+        {
+            timeout_ms = 5000,
+            maximum_output_bytes = 4096,
+        }
+    )
+    local output = type(result.stdout) == "string" and
+        result.stdout:match("^%s*(.-)%s*$") or ""
+    local registry_result = process_bridge_request({
+        operation = "get_steam_install_path",
+    })
+    local registry_ok = registry_result ~= nil and
+        registry_result.ok == true
+    return {
+        ok = result.started == true and result.timedOut ~= true and
+            result.exitCode == 0 and output == "VLB_PROCESS_BRIDGE_OK" and
+            registry_ok,
+        started = result.started == true,
+        timedOut = result.timedOut == true,
+        exitCode = result.exitCode,
+        durationMs = result.durationMs,
+        capturedMarker = output == "VLB_PROCESS_BRIDGE_OK",
+        registryBridge = registry_ok,
+        ffiCalls = false,
+        error = result.error,
+    }
 end
 
 return M

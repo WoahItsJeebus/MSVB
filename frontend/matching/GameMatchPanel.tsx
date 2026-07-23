@@ -3,6 +3,12 @@ import { useState } from 'react';
 
 import { log } from '../logging/Logger';
 import {
+	fullWidthControlStyle,
+	ResponsiveActionRow,
+	ResponsiveControlGroup,
+	responsiveButtonStyle,
+} from '../ui/ResponsiveControls';
+import {
 	getSteamAppIdOverride,
 	matchVortexGame,
 	resolveSteamInstallation,
@@ -180,30 +186,35 @@ export function GameMatchPanel() {
 				description={resultDescription(installation, match, status)}
 				childrenLayout="below"
 			>
-				<TextField
-					value={appIdText}
-					disabled={busy !== undefined}
-					onChange={(event) => {
-						setAppIdText(event.currentTarget.value.trim());
-						setInstallation(undefined);
-						setMatch(undefined);
-						setStatus(undefined);
-					}}
-				/>
-				<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-					<DialogButton
-						disabled={busy !== undefined || validAppId === undefined}
-						onClick={() => void resolve()}
-					>
-						{busy === 'resolve' ? 'Resolving...' : 'Resolve Steam path'}
-					</DialogButton>
-					<DialogButton
-						disabled={busy !== undefined || validAppId === undefined}
-						onClick={() => void executeMatch()}
-					>
-						{busy === 'match' ? 'Matching...' : 'Match Vortex game'}
-					</DialogButton>
-				</div>
+				<ResponsiveControlGroup>
+					<TextField
+						value={appIdText}
+						disabled={busy !== undefined}
+						style={fullWidthControlStyle}
+						onChange={(event) => {
+							setAppIdText(event.currentTarget.value.trim());
+							setInstallation(undefined);
+							setMatch(undefined);
+							setStatus(undefined);
+						}}
+					/>
+					<ResponsiveActionRow>
+						<DialogButton
+							disabled={busy !== undefined || validAppId === undefined}
+							onClick={() => void resolve()}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'resolve' ? 'Resolving...' : 'Resolve Steam path'}
+						</DialogButton>
+						<DialogButton
+							disabled={busy !== undefined || validAppId === undefined}
+							onClick={() => void executeMatch()}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'match' ? 'Matching...' : 'Match Vortex game'}
+						</DialogButton>
+					</ResponsiveActionRow>
+				</ResponsiveControlGroup>
 			</Field>
 			<Field
 				label="Steam AppID to Vortex game-ID override"
@@ -211,35 +222,41 @@ export function GameMatchPanel() {
 				childrenLayout="below"
 				bottomSeparator="none"
 			>
-				<TextField
-					value={vortexGameId}
-					disabled={busy !== undefined}
-					onChange={(event) => setVortexGameId(event.currentTarget.value)}
-				/>
-				<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-					<DialogButton
-						disabled={busy !== undefined || validAppId === undefined}
-						onClick={() => void loadOverride()}
-					>
-						{busy === 'load-override' ? 'Loading...' : 'Load mapping'}
-					</DialogButton>
-					<DialogButton
-						disabled={
-							busy !== undefined ||
-							validAppId === undefined ||
-							vortexGameId.trim().length === 0
-						}
-						onClick={() => void saveOverride(vortexGameId)}
-					>
-						{busy === 'save-override' ? 'Saving...' : 'Save mapping'}
-					</DialogButton>
-					<DialogButton
-						disabled={busy !== undefined || validAppId === undefined}
-						onClick={() => void saveOverride('')}
-					>
-						Clear mapping
-					</DialogButton>
-				</div>
+				<ResponsiveControlGroup>
+					<TextField
+						value={vortexGameId}
+						disabled={busy !== undefined}
+						style={fullWidthControlStyle}
+						onChange={(event) => setVortexGameId(event.currentTarget.value)}
+					/>
+					<ResponsiveActionRow>
+						<DialogButton
+							disabled={busy !== undefined || validAppId === undefined}
+							onClick={() => void loadOverride()}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'load-override' ? 'Loading...' : 'Load mapping'}
+						</DialogButton>
+						<DialogButton
+							disabled={
+								busy !== undefined ||
+								validAppId === undefined ||
+								vortexGameId.trim().length === 0
+							}
+							onClick={() => void saveOverride(vortexGameId)}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'save-override' ? 'Saving...' : 'Save mapping'}
+						</DialogButton>
+						<DialogButton
+							disabled={busy !== undefined || validAppId === undefined}
+							onClick={() => void saveOverride('')}
+							style={responsiveButtonStyle}
+						>
+							Clear mapping
+						</DialogButton>
+					</ResponsiveActionRow>
+				</ResponsiveControlGroup>
 			</Field>
 		</>
 	);

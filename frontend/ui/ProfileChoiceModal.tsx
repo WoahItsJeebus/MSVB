@@ -1,6 +1,13 @@
-import { DialogButton, ModalRoot } from '@steambrew/client';
+import {
+	DialogBodyText,
+	DialogButton,
+	DialogControlsSection,
+	DialogHeader,
+	ModalRoot,
+} from '@steambrew/client';
 
 import type { VortexProfile } from '../vortex/VortexTypes';
+import { STEAM_MODAL_CLASS_NAME, SteamModalChromeStyles } from './SteamModalChrome';
 
 export interface ProfileChoiceModalProps {
 	profiles: VortexProfile[];
@@ -27,13 +34,18 @@ export function ProfileChoiceModal({
 }: ProfileChoiceModalProps) {
 	return (
 		<ModalRoot
+			modalClassName={STEAM_MODAL_CLASS_NAME}
 			bDisableBackgroundDismiss
 			closeModal={onDismiss}
 			onCancel={onDismiss}
 			onEscKeypress={onDismiss}
 		>
-			<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '560px' }}>
-				<div>Select the Vortex profile to activate before the configured launch target starts.</div>
+			<SteamModalChromeStyles />
+			<DialogHeader>Select a Vortex profile</DialogHeader>
+			<DialogBodyText>
+				Select the profile to activate before the configured launch target starts.
+			</DialogBodyText>
+			<DialogControlsSection>
 				<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 					{profiles.map((profile) => (
 						<DialogButton key={profile.id} onClick={() => onSelect(profile)}>
@@ -42,10 +54,10 @@ export function ProfileChoiceModal({
 						</DialogButton>
 					))}
 				</div>
-				<div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+				<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
 					<DialogButton onClick={onDismiss}>Cancel</DialogButton>
 				</div>
-			</div>
+			</DialogControlsSection>
 		</ModalRoot>
 	);
 }

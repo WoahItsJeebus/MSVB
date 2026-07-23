@@ -1,4 +1,4 @@
-local cjson = require("cjson")
+local json_decode = require("util.json_decode")
 
 local M = {}
 
@@ -78,7 +78,7 @@ function M.parse(output)
         return state, metadata
     end
 
-    local whole_json_ok, whole_json = pcall(cjson.decode, trimmed)
+    local whole_json_ok, whole_json = pcall(json_decode.decode, trimmed)
     if whole_json_ok and type(whole_json) == "table" then
         metadata.format = "json"
         metadata.outputIsJson = true
@@ -93,7 +93,8 @@ function M.parse(output)
 
             if path ~= nil and is_approved_path(path) then
                 metadata.assignmentCount = metadata.assignmentCount + 1
-                local decoded_ok, decoded = pcall(cjson.decode, encoded_value)
+                local decoded_ok, decoded =
+                    pcall(json_decode.decode, encoded_value)
                 if decoded_ok then
                     metadata.jsonValueCount = metadata.jsonValueCount + 1
                     set_path(state, path, decoded)

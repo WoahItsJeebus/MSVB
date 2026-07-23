@@ -10,27 +10,16 @@ import {
 	type VortexGameMatch,
 } from './MatchTypes';
 
-const requestSteamInstallation = callable<
-	[{ steam_app_id: number; client_library_paths_json: string }],
-	string
->('resolve_steam_installation');
-const requestGameMatch = callable<
-	[
-		{
-			steam_app_id: number;
-			client_library_paths_json: string;
-			steam_executable_path: string;
-		},
-	],
-	string
->('match_vortex_game');
-const requestGetOverride = callable<[{ steam_app_id: number }], string>(
+const requestSteamInstallation = callable<[{ request_json: string }], string>(
+	'resolve_steam_installation',
+);
+const requestGameMatch = callable<[{ request_json: string }], string>('match_vortex_game');
+const requestGetOverride = callable<[{ request_json: string }], string>(
 	'get_steam_app_id_override',
 );
-const requestSetOverride = callable<
-	[{ steam_app_id: number; vortex_game_id: string }],
-	string
->('set_steam_app_id_override');
+const requestSetOverride = callable<[{ request_json: string }], string>(
+	'set_steam_app_id_override',
+);
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
@@ -98,8 +87,10 @@ export async function resolveSteamInstallation(appId: number): Promise<SteamInst
 	const paths = await clientLibraryPaths(appId);
 	const response = await withTimeout(
 		requestSteamInstallation({
-			steam_app_id: appId,
-			client_library_paths_json: JSON.stringify(paths),
+			request_json: JSON.stringify({
+				steam_app_id: appId,
+				client_library_paths_json: JSON.stringify(paths),
+			}),
 		}),
 		10_000,
 		'Steam installation resolution',
@@ -111,9 +102,11 @@ export async function matchVortexGame(appId: number): Promise<VortexGameMatch> {
 	const paths = await clientLibraryPaths(appId);
 	const response = await withTimeout(
 		requestGameMatch({
-			steam_app_id: appId,
-			client_library_paths_json: JSON.stringify(paths),
-			steam_executable_path: '',
+			request_json: JSON.stringify({
+				steam_app_id: appId,
+				client_library_paths_json: JSON.stringify(paths),
+				steam_executable_path: '',
+			}),
 		}),
 		45_000,
 		'Vortex game matching',
@@ -125,7 +118,9 @@ export async function getSteamAppIdOverride(
 	appId: number,
 ): Promise<SteamAppIdOverrideResult> {
 	const response = await withTimeout(
-		requestGetOverride({ steam_app_id: appId }),
+		requestGetOverride({
+			request_json: JSON.stringify({ steam_app_id: appId }),
+		}),
 		5_000,
 		'Loading the game mapping',
 	);
@@ -137,7 +132,12 @@ export async function setSteamAppIdOverride(
 	vortexGameId: string,
 ): Promise<SteamAppIdOverrideResult> {
 	const response = await withTimeout(
-		requestSetOverride({ steam_app_id: appId, vortex_game_id: vortexGameId }),
+		requestSetOverride({
+			request_json: JSON.stringify({
+				steam_app_id: appId,
+				vortex_game_id: vortexGameId,
+			}),
+		}),
 		5_000,
 		'Saving the game mapping',
 	);

@@ -12,12 +12,22 @@ import {
 } from './VortexTypes';
 
 const requestInstallation = callable<[], string>('get_vortex_installation');
-const requestOverride = callable<[{ executable_path: string }], string>('set_vortex_executable_path');
+const requestOverride = callable<[{ request_json: string }], string>('set_vortex_executable_path');
 const requestProbe = callable<[], string>('run_vortex_probe');
-const requestActivation = callable<
-	[{ vortex_game_id: string; vortex_profile_id: string }],
-	string
->('activate_vortex_profile');
+const requestCacheWarm = callable<[], string>('warm_vortex_state_cache');
+const requestActivation = callable<[{ request_json: string }], string>(
+	'activate_vortex_profile',
+);
+
+export interface VortexCacheWarmResult {
+	ok: boolean;
+	refreshed: boolean;
+	cacheAvailable: boolean;
+	durationMs: number;
+	profileCount: number;
+	discoveredGameCount: number;
+	error?: string;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
@@ -46,6 +56,36 @@ function parseJson(response: string, operation: string): unknown {
 	}
 }
 
+function parseCacheWarmResult(value: unknown): VortexCacheWarmResult {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		throw new Error('Vortex cache refresh returned an invalid result.');
+	}
+	const result = value as Record<string, unknown>;
+	if (
+		typeof result.ok !== 'boolean' ||
+		typeof result.refreshed !== 'boolean' ||
+		typeof result.cacheAvailable !== 'boolean' ||
+		typeof result.durationMs !== 'number' ||
+		!Number.isFinite(result.durationMs) ||
+		typeof result.profileCount !== 'number' ||
+		!Number.isSafeInteger(result.profileCount) ||
+		typeof result.discoveredGameCount !== 'number' ||
+		!Number.isSafeInteger(result.discoveredGameCount) ||
+		(result.error !== undefined && typeof result.error !== 'string')
+	) {
+		throw new Error('Vortex cache refresh returned invalid fields.');
+	}
+	return {
+		ok: result.ok,
+		refreshed: result.refreshed,
+		cacheAvailable: result.cacheAvailable,
+		durationMs: result.durationMs,
+		profileCount: result.profileCount,
+		discoveredGameCount: result.discoveredGameCount,
+		error: result.error,
+	};
+}
+
 export async function getVortexInstallation(): Promise<VortexInstallation> {
 	const response = await withTimeout(requestInstallation(), 8_000, 'Vortex detection');
 	return parseVortexInstallation(parseJson(response, 'Vortex detection'));
@@ -53,7 +93,9 @@ export async function getVortexInstallation(): Promise<VortexInstallation> {
 
 export async function setVortexExecutablePath(path: string): Promise<VortexOverrideResult> {
 	const response = await withTimeout(
-		requestOverride({ executable_path: path }),
+		requestOverride({
+			request_json: JSON.stringify({ executable_path: path }),
+		}),
 		8_000,
 		'Saving the Vortex override',
 	);
@@ -65,14 +107,25 @@ export async function runVortexProbe(): Promise<VortexProbeResult> {
 	return parseVortexProbeResult(parseJson(response, 'The read-only Vortex probe'));
 }
 
+export async function warmVortexStateCache(): Promise<VortexCacheWarmResult> {
+	const response = await withTimeout(
+		requestCacheWarm(),
+		45_000,
+		'The background Vortex state refresh',
+	);
+	return parseCacheWarmResult(parseJson(response, 'The background Vortex state refresh'));
+}
+
 export async function activateVortexProfile(
 	gameId: string,
 	profileId: string,
 ): Promise<VortexActivationResult> {
 	const response = await withTimeout(
 		requestActivation({
-			vortex_game_id: gameId,
-			vortex_profile_id: profileId,
+			request_json: JSON.stringify({
+				vortex_game_id: gameId,
+				vortex_profile_id: profileId,
+			}),
 		}),
 		310_000,
 		'Vortex profile activation',

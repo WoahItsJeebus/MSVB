@@ -24,6 +24,7 @@ export interface VortexGameMatch {
 	steamSource?: SteamInstallationSource;
 	steamInstallPath?: string;
 	vortexGameId?: string;
+	vortexGameName?: string;
 	vortexGamePath?: string;
 	profiles: VortexProfile[];
 	warning?: string;
@@ -166,6 +167,7 @@ export function parseVortexGameMatch(value: unknown): VortexGameMatch {
 		steamSource,
 		steamInstallPath: optionalString(record, 'steamInstallPath', label),
 		vortexGameId: optionalString(record, 'vortexGameId', label),
+		vortexGameName: optionalString(record, 'vortexGameName', label),
 		vortexGamePath: optionalString(record, 'vortexGamePath', label),
 		profiles: asArray(record.profiles, `${label} profiles`).map(parseProfile),
 		warning: optionalString(record, 'warning', label),

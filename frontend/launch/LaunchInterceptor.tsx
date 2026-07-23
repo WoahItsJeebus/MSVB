@@ -5,8 +5,10 @@ import {
 	showModal,
 	type Apps,
 	type Patch,
+	type ShowModalProps,
 	type ShowModalResult,
 } from '@steambrew/client';
+import type { ReactNode } from 'react';
 
 import { log } from '../logging/Logger';
 import { matchVortexGame } from '../matching/MatchClient';
@@ -114,6 +116,32 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 	});
 }
 
+function showDesktopModal(modal: ReactNode, props: ShowModalProps): ShowModalResult {
+	// @steambrew/client's omitted-parent fallback calls findSP(). In Steam's
+	// desktop SharedJS context the gamepad navigation controller may not exist,
+	// causing findSP() to throw before the modal is created. RunGame interception
+	// already executes in the correct desktop window, so pass it explicitly.
+	return showModal(modal, window, props);
+}
+
+function getSteamAppName(appId: number, vortexFallback?: string): string {
+	try {
+		const displayName = window.appStore
+			?.GetAppOverviewByAppID(appId)
+			?.display_name
+			?.trim();
+		if (displayName !== undefined && displayName.length > 0) {
+			return displayName;
+		}
+	} catch {
+		// The in-memory Steam app overview can be unavailable briefly during
+		// client startup. The matched Vortex name is a safe display fallback.
+	}
+
+	const fallback = vortexFallback?.trim();
+	return fallback !== undefined && fallback.length > 0 ? fallback : `Steam app ${appId}`;
+}
+
 export function startLaunchInterception(): LaunchInterception {
 	let active = true;
 	let interceptionEnabled = true;
@@ -216,14 +244,13 @@ export function startLaunchInterception(): LaunchInterception {
 
 		pending.state = 'failed';
 		closeModal(pending);
-		pending.modal = showModal(
+		pending.modal = showDesktopModal(
 			<ActivationErrorModal
 				message={message}
 				warning={warning}
 				onContinueWithSteam={() => continueWithSteam(pending, continueReason)}
 				onCancel={() => cancelPending(pending, cancelReason)}
 			/>,
-			undefined,
 			{
 				strTitle: title,
 				bHideMainWindowForPopouts: false,
@@ -430,11 +457,10 @@ export function startLaunchInterception(): LaunchInterception {
 
 		pending.state = 'activating-vortex';
 		closeModal(pending);
-		pending.modal = showModal(
+		pending.modal = showDesktopModal(
 			<ActivationProgressModal
 				onDismiss={() => cancelPending(pending, 'activation-cancelled')}
 			/>,
-			undefined,
 			{
 				strTitle: 'Activating Vortex profile',
 				bHideMainWindowForPopouts: false,
@@ -539,13 +565,12 @@ export function startLaunchInterception(): LaunchInterception {
 		}
 
 		closeModal(pending);
-		pending.modal = showModal(
+		pending.modal = showDesktopModal(
 			<ProfileChoiceModal
 				profiles={profiles}
 				onSelect={(profile) => void activateProfile(pending, match, profile)}
 				onDismiss={() => cancelPending(pending, 'profile-selection-dismissed')}
 			/>,
-			undefined,
 			{
 				strTitle: 'Select a Vortex profile',
 				bHideMainWindowForPopouts: false,
@@ -611,22 +636,26 @@ export function startLaunchInterception(): LaunchInterception {
 		}
 
 		pending.state = 'awaiting-user';
-		pending.modal = showModal(
+		pending.modal = showDesktopModal(
 			<LaunchChoiceModal
+				appName={getSteamAppName(
+					pending.request.numericAppId,
+					match.vortexGameName,
+				)}
 				steamAppId={pending.request.numericAppId}
-				profileCount={match.profiles.length}
+				profileCount={profiles.length}
 				onLaunchWithVortex={() => beginVortexFlow(pending, match)}
 				onContinueWithSteam={() => {
 					rememberChoiceSafely(pending, 'steam');
 					continueWithSteam(pending, 'user-selected-steam');
 				}}
-				onDismiss={() => cancelPending(pending, 'dismissed')}
+				onCancel={() => cancelPending(pending, 'dismissed')}
 			/>,
-			undefined,
 			{
 				strTitle: 'Vortex Launch Bridge',
 				bHideMainWindowForPopouts: false,
 				bNeverPopOut: true,
+				popupWidth: 720,
 			},
 		);
 

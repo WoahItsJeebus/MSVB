@@ -81,12 +81,16 @@ The matching decision has a 20-second frontend deadline. A frontend/backend brid
 
 ## Modal semantics
 
-The modal uses the current Steam `ModalRoot`, `showModal`, and `DialogButton` components. Its only action buttons are exactly:
+The launch-choice modal uses the current Steam `ConfirmModal` and `showModal`
+components. This supplies Steam's native themed title, typography, primary and
+secondary actions, focus behavior, and close control. Its only action buttons
+are exactly:
 
 - `Launch with Vortex`
 - `Continue launching with Steam...`
+- `Cancel`
 
-The modal explicitly states that continuing through Steam does not change anything Vortex may already have deployed.
+The modal explicitly states that continuing through Steam does not change anything Vortex may already have deployed. Its title sentence uses Steam's display name, while platform and AppID metadata appear in a compact footer above the action row. Cancel, the title-bar close icon, and Escape all cancel the held request.
 
 Background dismissal is disabled. The close icon, Escape, controller cancel, and other explicit cancel callbacks all cancel the pending request. None of them are interpreted as choosing Steam.
 

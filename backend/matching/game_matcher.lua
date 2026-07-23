@@ -1,13 +1,10 @@
 local path = require("util.path")
+local json_decode = require("util.json_decode")
 
 local M = {}
 
 local function empty_array()
-    local decoded_ok, decoded = pcall(require("cjson").decode, "[]")
-    if decoded_ok then
-        return decoded
-    end
-    return {}
+    return json_decode.empty_array()
 end
 
 local function app_id_text(value)
@@ -63,6 +60,9 @@ local function finish_match(result, input, game, confidence)
     result.matched = true
     result.confidence = confidence
     result.vortexGameId = game.id
+    if type(game.name) == "string" and game.name ~= "" then
+        result.vortexGameName = game.name
+    end
     if type(game.path) == "string" then
         result.vortexGamePath = game.path
     end

@@ -1,4 +1,8 @@
-local cjson = require("cjson")
+local jit_disabled = false
+if type(jit) == "table" and type(jit.off) == "function" then
+    jit_disabled = pcall(jit.off)
+end
+
 local fs = require("fs")
 local log = require("logging")
 local millennium = require("millennium")
@@ -8,20 +12,41 @@ local settings = require("settings.settings")
 local steam_manifests = require("steam.manifests")
 local vortex_cli = require("vortex.cli")
 local vortex_launcher = require("vortex.launcher")
+local vortex_state_cache_module = require("vortex.state_cache")
 local command_line = require("util.command_line")
+local json_decode = require("util.json_decode")
+local json_encode = require("util.json_encode")
 local windows = require("util.windows")
 
-local PLUGIN_VERSION = "0.7.0"
+local PLUGIN_VERSION = "0.7.13"
 local backend_started_at = os.time()
+local MAXIMUM_RPC_REQUEST_BYTES = 128 * 1024
+local vortex_state_cache = vortex_state_cache_module.new(
+    vortex_cli.read_state,
+    windows.monotonic_milliseconds
+)
 
 local function encode_response(value)
-    local encoded_ok, encoded = pcall(cjson.encode, value)
+    local encoded_ok, encoded = pcall(json_encode.encode, value)
     if encoded_ok then
         return encoded
     end
 
     log.error("backend.response.encode_failed", {})
     return '{"ok":false,"error":"The backend response could not be encoded."}'
+end
+
+local function decode_request(request_json)
+    if type(request_json) ~= "string" or request_json == "" or
+        #request_json > MAXIMUM_RPC_REQUEST_BYTES then
+        return nil
+    end
+
+    local decoded_ok, decoded = pcall(json_decode.decode, request_json)
+    if not decoded_ok or type(decoded) ~= "table" then
+        return nil
+    end
+    return decoded
 end
 
 local function runtime_value(key)
@@ -52,6 +77,118 @@ function get_health()
     return encode_response(health)
 end
 
+function verify_rpc_transport(request_json)
+    local request = decode_request(request_json)
+    local nonce = request and request.nonce
+    if type(nonce) ~= "string" or nonce == "" or #nonce > 128 then
+        return encode_response({
+            ok = false,
+            error = "RPC transport verification request is invalid.",
+        })
+    end
+
+    return encode_response({
+        ok = true,
+        nonce = nonce,
+    })
+end
+
+function verify_process_bridge()
+    local verified_ok, result = pcall(windows.verify_process_bridge)
+    if not verified_ok then
+        result = {
+            ok = false,
+            error = "The process bridge verification failed.",
+        }
+    end
+
+    local fields = {
+        ok = result.ok == true,
+        started = result.started == true,
+        timedOut = result.timedOut == true,
+        exitCode = result.exitCode,
+        durationMs = result.durationMs,
+        capturedMarker = result.capturedMarker == true,
+    }
+    if result.ok == true then
+        log.info("backend.process_bridge.ok", fields)
+    else
+        log.error("backend.process_bridge.failed", fields)
+    end
+    return encode_response(result)
+end
+
+function warm_vortex_state_cache()
+    log.info("vortex.cache.warm_started", {
+        readOnly = true,
+    })
+    local result = vortex_state_cache.refresh()
+    local fields = {
+        refreshed = result.refreshed == true,
+        cacheAvailable = result.cacheAvailable == true,
+        durationMs = result.durationMs,
+        profileCount = result.profileCount,
+        discoveredGameCount = result.discoveredGameCount,
+        readOnly = true,
+    }
+    if result.ok then
+        log.info("vortex.cache.warm_completed", fields)
+    else
+        log.warn("vortex.cache.warm_failed", fields)
+    end
+    return encode_response(result)
+end
+
+local function sanitized_frontend_fields(value, depth)
+    if depth > 2 or type(value) ~= "table" then
+        return {}
+    end
+
+    local result = {}
+    local count = 0
+    for key, item in pairs(value) do
+        if count >= 32 then
+            break
+        end
+        if type(key) == "string" and #key <= 64 then
+            local item_type = type(item)
+            if item_type == "boolean" or item_type == "number" then
+                result[key] = item
+                count = count + 1
+            elseif item_type == "string" then
+                result[key] = item:sub(1, 512)
+                count = count + 1
+            elseif item_type == "table" and depth < 2 then
+                result[key] = sanitized_frontend_fields(item, depth + 1)
+                count = count + 1
+            end
+        end
+    end
+    return result
+end
+
+function record_frontend_log(request_json)
+    local request = decode_request(request_json)
+    local level = request and request.level
+    local event = request and request.event
+    if (level ~= "debug" and level ~= "info" and
+        level ~= "warn" and level ~= "error") or
+        type(event) ~= "string" or event == "" or #event > 128 or
+        event:match("^[%w%._%-]+$") == nil then
+        return encode_response({
+            ok = false,
+            error = "Frontend log record is invalid.",
+        })
+    end
+
+    log.frontend(
+        level,
+        event,
+        sanitized_frontend_fields(request.fields, 0)
+    )
+    return encode_response({ ok = true })
+end
+
 function get_vortex_installation()
     local installation = vortex_cli.get_installation()
 
@@ -66,7 +203,9 @@ function get_vortex_installation()
     return encode_response(installation)
 end
 
-function set_vortex_executable_path(executable_path)
+function set_vortex_executable_path(request_json)
+    local request = decode_request(request_json)
+    local executable_path = request and request.executable_path
     if type(executable_path) ~= "string" then
         return encode_response({
             ok = false,
@@ -95,6 +234,7 @@ function set_vortex_executable_path(executable_path)
     end
 
     detection.invalidate_cache()
+    vortex_state_cache.invalidate()
     local installation = vortex_cli.get_installation()
     log.info("vortex.settings.override_saved", {
         configured = trimmed ~= "",
@@ -134,6 +274,20 @@ function run_vortex_probe()
 
     local version_command = probe.versionCommand or {}
     local state_command = probe.stateCommand or {}
+    local cache_updated = false
+    if state_command.executed == true and state_command.exitCode == 0 and
+        state_command.timedOut ~= true and
+        state_command.outputFormat ~= "unknown" then
+        cache_updated = vortex_state_cache.store({
+            ok = true,
+            installation = probe.installation,
+            profiles = probe.profiles,
+            discoveredGames = probe.discoveredGames,
+            invalidProfileCount = probe.invalidProfileCount,
+            warnings = probe.warnings,
+            stateCommand = state_command,
+        })
+    end
     log.info("vortex.probe.completed", {
         ok = probe.ok,
         found = probe.installation and probe.installation.found == true,
@@ -148,13 +302,17 @@ function run_vortex_probe()
         profileCount = type(probe.profiles) == "table" and #probe.profiles or 0,
         discoveredGameCount = type(probe.discoveredGames) == "table" and
             #probe.discoveredGames or 0,
+        stateCacheUpdated = cache_updated,
         outputRedacted = true,
     })
 
     return encode_response(probe)
 end
 
-function activate_vortex_profile(vortex_game_id, vortex_profile_id)
+function activate_vortex_profile(request_json)
+    local request = decode_request(request_json)
+    local vortex_game_id = request and request.vortex_game_id
+    local vortex_profile_id = request and request.vortex_profile_id
     log.info("vortex.activation.started", {
         gameIdRedacted = type(vortex_game_id) == "string",
         profileIdRedacted = type(vortex_profile_id) == "string",
@@ -202,6 +360,10 @@ function activate_vortex_profile(vortex_game_id, vortex_profile_id)
         identifiersRedacted = true,
     }
     if activation.ok == true then
+        vortex_state_cache.mark_profile_active(
+            vortex_game_id,
+            vortex_profile_id
+        )
         log.info("vortex.activation.completed", log_fields)
     else
         log.warn("vortex.activation.failed", log_fields)
@@ -225,12 +387,14 @@ function get_plugin_settings()
     })
 end
 
-function update_plugin_settings(
-    always_ask,
-    remember_choice_per_game,
-    vortex_activation_timeout_ms,
-    diagnostic_logging
-)
+function update_plugin_settings(request_json)
+    local request = decode_request(request_json)
+    local always_ask = request and request.always_ask
+    local remember_choice_per_game =
+        request and request.remember_choice_per_game
+    local vortex_activation_timeout_ms =
+        request and request.vortex_activation_timeout_ms
+    local diagnostic_logging = request and request.diagnostic_logging
     local saved, save_error = settings.update_general(
         always_ask,
         remember_choice_per_game,
@@ -257,7 +421,9 @@ function update_plugin_settings(
     })
 end
 
-function get_game_launch_settings(steam_app_id)
+function get_game_launch_settings(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
     local game_settings, settings_error =
         settings.get_game_launch_settings(steam_app_id)
     if game_settings == nil then
@@ -272,13 +438,14 @@ function get_game_launch_settings(steam_app_id)
     })
 end
 
-function set_game_launch_settings(
-    steam_app_id,
-    preferred_profile_id,
-    preferred_launch_target,
-    custom_executable,
-    custom_arguments
-)
+function set_game_launch_settings(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
+    local preferred_profile_id = request and request.preferred_profile_id
+    local preferred_launch_target =
+        request and request.preferred_launch_target
+    local custom_executable = request and request.custom_executable
+    local custom_arguments = request and request.custom_arguments
     local saved, save_error = settings.set_game_launch_settings(
         steam_app_id,
         preferred_profile_id,
@@ -318,7 +485,11 @@ function set_game_launch_settings(
     })
 end
 
-function remember_launch_choice(steam_app_id, choice, vortex_profile_id)
+function remember_launch_choice(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
+    local choice = request and request.choice
+    local vortex_profile_id = request and request.vortex_profile_id
     local saved, save_error = settings.remember_launch_choice(
         steam_app_id,
         choice,
@@ -359,7 +530,9 @@ function clear_remembered_choices()
     return encode_response({ ok = true })
 end
 
-function launch_configured_target(steam_app_id)
+function launch_configured_target(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
     local game_settings, settings_error =
         settings.get_game_launch_settings(steam_app_id)
     if game_settings == nil then
@@ -447,7 +620,11 @@ local function unresolved_match(app_id, warning)
     }
 end
 
-function resolve_steam_installation(steam_app_id, client_library_paths_json)
+function resolve_steam_installation(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
+    local client_library_paths_json =
+        request and request.client_library_paths_json
     local library_hints =
         steam_manifests.decode_library_hints(client_library_paths_json)
     local resolve_ok, result = pcall(
@@ -481,7 +658,9 @@ function resolve_steam_installation(steam_app_id, client_library_paths_json)
     return encode_response(result)
 end
 
-function get_steam_app_id_override(steam_app_id)
+function get_steam_app_id_override(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
     local app_id = app_id_number(steam_app_id)
     if app_id == nil then
         return encode_response({
@@ -501,7 +680,10 @@ function get_steam_app_id_override(steam_app_id)
     return encode_response(result)
 end
 
-function set_steam_app_id_override(steam_app_id, vortex_game_id)
+function set_steam_app_id_override(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
+    local vortex_game_id = request and request.vortex_game_id
     local app_id = app_id_number(steam_app_id)
     if app_id == nil or type(vortex_game_id) ~= "string" then
         return encode_response({
@@ -539,11 +721,13 @@ function set_steam_app_id_override(steam_app_id, vortex_game_id)
     return encode_response(result)
 end
 
-function match_vortex_game(
-    steam_app_id,
-    client_library_paths_json,
-    steam_executable_path
-)
+function match_vortex_game(request_json)
+    local request = decode_request(request_json)
+    local steam_app_id = request and request.steam_app_id
+    local client_library_paths_json =
+        request and request.client_library_paths_json
+    local steam_executable_path =
+        request and request.steam_executable_path
     local app_id = app_id_number(steam_app_id)
     if app_id == nil then
         return encode_response(unresolved_match(
@@ -575,13 +759,16 @@ function match_vortex_game(
         return encode_response(result)
     end
 
-    local state_ok, state = pcall(vortex_cli.read_state)
-    if not state_ok or state.ok ~= true then
-        local warning = "Vortex discovered-game state could not be read."
-        if state_ok and type(state.warnings) == "table" and
-            type(state.warnings[1]) == "string" then
-            warning = state.warnings[1]
-        end
+    local state, cache_metadata = vortex_state_cache.get()
+    local cache_hit = state ~= nil
+    local refresh_result
+    if state == nil then
+        refresh_result = vortex_state_cache.refresh()
+        state, cache_metadata = vortex_state_cache.get()
+    end
+    if state == nil or state.ok ~= true then
+        local warning = refresh_result and refresh_result.error or
+            "Vortex discovered-game state could not be read."
         local result = unresolved_match(app_id, warning)
         result.steamInstallPath = steam_result.installPath
         result.steamSource = steam_result.source
@@ -591,6 +778,9 @@ function match_vortex_game(
             steamAppId = app_id,
             steamSource = steam_result.source,
             failureStage = "vortex-state",
+            cacheHit = false,
+            cacheAvailable = refresh_result and
+                refresh_result.cacheAvailable == true,
             installPathRedacted = true,
         })
         return encode_response(result)
@@ -626,6 +816,10 @@ function match_vortex_game(
         installPathRedacted = true,
         vortexGamePathRedacted = result.vortexGamePath ~= nil,
         vortexGameIdRedacted = result.vortexGameId ~= nil,
+        stateCacheHit = cache_hit,
+        stateCacheAgeMs = cache_metadata and cache_metadata.ageMs,
+        stateQueryDurationMs = refresh_result and
+            refresh_result.durationMs,
     })
     return encode_response(result)
 end
@@ -633,6 +827,7 @@ end
 local function on_load()
     log.info("backend.loaded", {
         pluginVersion = PLUGIN_VERSION,
+        jitDisabled = jit_disabled,
     })
 
     millennium.ready()

@@ -1,5 +1,20 @@
 # Phase 6 hardening and settings
 
+Launch dialogs explicitly target Steam's desktop SharedJS window. This avoids
+the gamepad-window auto-discovery path used by the modal helper, which is not
+available for every desktop launch route. Frontend launch diagnostics are also
+mirrored into Millennium's plugin log through a bounded backend RPC sink.
+
+The launch, activation-progress, and recovery dialogs use Steam's native
+confirmation modal. Settings fields place related inputs and actions inside one
+full-width responsive child, wrap button rows when space is constrained, and
+hide per-game detail fields until an AppID's settings have been loaded.
+
+The plugin warms a memory-only Vortex discovered-game/profile snapshot after
+startup and refreshes it every five minutes. Matching reads the last successful
+snapshot immediately. Refresh failures preserve that snapshot, a Vortex
+executable override invalidates it, and a successful read-only probe updates it.
+
 ## Final phase boundary
 
 Phase 6 completes the MVP with additional direct `RunGame` sources, explicit settings, opt-in remembered decisions, per-game launch targets, improved recovery, diagnostic-log control, and automated tests. It does not patch Steam action callbacks, edit Vortex state, purge deployed mods, or add non-Steam game support.
@@ -131,3 +146,27 @@ The Phase 6 runner covers:
 - exact Vortex activation-log signal matching.
 
 The repository's Lua sources also pass `luac -p` syntax validation. Live Steam/Vortex behavior still requires the manual matrix in the README because the desktop host and Vortex process are unavailable to automated unit tests.
+
+The backend uses Millennium's supported `json` Lua module for decoding. The
+Phase 6 runner rejects legacy `cjson` imports because they crash the current Lua
+VM before plugin logging is initialized. Responses, logs, and settings use the
+plugin's bounded pure-Lua JSON encoder to avoid the Millennium 3.3.1 native
+encoder access violation observed after a successful nested game/profile match.
+All JSON encoding and decoding performed by plugin RPC handlers is now bounded
+pure Lua so nested Vortex state never crosses Millennium's native JSON module.
+
+Millennium 3.3.1 passes Lua RPC request-object values positionally rather than binding them by key. Every parameterized bridge RPC therefore uses a single `request_json` envelope and validates/decodes it in the backend. The Phase 6 runner rejects multi-field callable contracts and handlers that bypass this envelope.
+
+The backend also disables LuaJIT before loading plugin modules. The interpreter is sufficient for this event-driven workload and avoids the Millennium 3.3.1 `lj_vm_hotcall`/`lj_dispatch_call` access violation captured when repeatedly invoking backend RPC handlers.
+
+Millennium 3.3.1's Windows LuaJIT FFI path can also clobber the nonvolatile
+register holding `handle_evaluate`'s JSON return pointer. Process launch,
+capture, timeout, process detection, and registry access therefore use the
+packaged PowerShell/.NET runner. A small Windows-subsystem command broker is
+temporarily selected as this Lua VM's `ComSpec`, allowing Lua's standard pipe
+API to capture the runner without creating a console window. Delays and timing
+use Millennium's utility module directly. Executable paths and arguments stay
+in a JSON request file and are passed to `System.Diagnostics.Process`; they are
+not interpolated into the shell command.
+Startup verifies both process execution and registry isolation before launch
+interception is enabled.

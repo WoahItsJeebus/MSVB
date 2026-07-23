@@ -4,7 +4,7 @@ local settings_file = "C:\\Test\\VortexLaunchBridge\\settings.json"
 local custom_executable = "C:\\Tools\\launcher.exe"
 local fail_writes = false
 
-package.preload.cjson = function()
+package.preload.json = function()
     return {
         encode = function(value)
             assert(type(value) == "table")
@@ -48,7 +48,11 @@ io.open = function(path, mode)
     assert(mode == "wb")
     return {
         write = function(_, value)
-            assert(value == "{}")
+            assert(type(value) == "string")
+            assert(value:sub(1, 1) == "{")
+            assert(value:sub(-1) == "}")
+            assert(value:find('"alwaysAsk":', 1, true) ~= nil)
+            assert(value:find('"rememberedChoices":', 1, true) ~= nil)
             if fail_writes then
                 return nil, "simulated write failure"
             end

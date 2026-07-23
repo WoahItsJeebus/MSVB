@@ -1,6 +1,6 @@
 package.path = "backend/?.lua;backend/?/init.lua;" .. package.path
 
-package.preload.cjson = function()
+package.preload.json = function()
     local function decode(value)
         value = value:match("^%s*(.-)%s*$")
         if value == "true" then

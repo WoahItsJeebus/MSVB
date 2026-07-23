@@ -1,6 +1,6 @@
 package.path = "backend/?.lua;backend/?/init.lua;" .. package.path
 
-package.preload.cjson = function()
+package.preload.json = function()
     return {
         decode = function(value)
             if value == "[]" then
@@ -117,6 +117,7 @@ local exact_path = matcher.match({
 assert(exact_path.matched == true)
 assert(exact_path.confidence == "exact-path")
 assert(exact_path.vortexGameId == "game-a")
+assert(exact_path.vortexGameName == "Completely Different Title")
 assert(#exact_path.profiles == 2)
 assert(exact_path.profiles[1].id == "profile-a")
 

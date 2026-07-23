@@ -1,4 +1,6 @@
-import { DialogButton, ModalRoot } from '@steambrew/client';
+import { ConfirmModal } from '@steambrew/client';
+
+import { STEAM_MODAL_CLASS_NAME, SteamModalChromeStyles } from './SteamModalChrome';
 
 export interface ActivationErrorModalProps {
 	message: string;
@@ -14,26 +16,27 @@ export function ActivationErrorModal({
 	onCancel,
 }: ActivationErrorModalProps) {
 	return (
-		<ModalRoot
+		<ConfirmModal
+			modalClassName={STEAM_MODAL_CLASS_NAME}
+			strTitle="Vortex activation failed"
+			strDescription={
+				<div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+					<SteamModalChromeStyles />
+					<div>{message}</div>
+					{warning === undefined ? null : <div>{warning}</div>}
+					<div>
+						Continuing with Steam resumes the exact intercepted request without asking Vortex
+						to make another change.
+					</div>
+				</div>
+			}
+			strOKButtonText="Continue launching with Steam..."
+			strCancelButtonText="Cancel"
 			bDisableBackgroundDismiss
 			closeModal={onCancel}
+			onOK={onContinueWithSteam}
 			onCancel={onCancel}
 			onEscKeypress={onCancel}
-		>
-			<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '560px' }}>
-				<div>{message}</div>
-				{warning === undefined ? null : <div>{warning}</div>}
-				<div>
-					Continuing with Steam resumes the exact intercepted request without asking Vortex to
-					make another change.
-				</div>
-				<div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-					<DialogButton onClick={onContinueWithSteam}>
-						Continue launching with Steam...
-					</DialogButton>
-					<DialogButton onClick={onCancel}>Cancel</DialogButton>
-				</div>
-			</div>
-		</ModalRoot>
+		/>
 	);
 }

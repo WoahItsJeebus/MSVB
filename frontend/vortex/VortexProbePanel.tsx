@@ -3,6 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { log } from '../logging/Logger';
 import {
+	fullWidthControlStyle,
+	ResponsiveActionRow,
+	ResponsiveControlGroup,
+	responsiveButtonStyle,
+} from '../ui/ResponsiveControls';
+import {
 	getVortexInstallation,
 	runVortexProbe,
 	setVortexExecutablePath,
@@ -134,6 +140,7 @@ export function VortexProbePanel() {
 				description={statusError ?? installationDescription(installation)}
 				icon={<IconsModule.Settings />}
 				childrenLayout="inline"
+				inlineWrap="shift-children-below"
 			>
 				<DialogButton disabled={busy !== undefined} onClick={() => void detect()}>
 					{busy === 'detect' ? 'Detecting...' : 'Detect Vortex'}
@@ -144,31 +151,37 @@ export function VortexProbePanel() {
 				description="Optional. The value is stored in the plugin settings under LocalAppData."
 				childrenLayout="below"
 			>
-				<TextField
-					value={overridePath}
-					disabled={busy !== undefined}
-					onChange={(event) => setOverridePath(event.currentTarget.value)}
-				/>
-				<div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-					<DialogButton
-						disabled={busy !== undefined || overridePath.length === 0}
-						onClick={() => void saveOverride(overridePath)}
-					>
-						{busy === 'save' ? 'Saving...' : 'Save override'}
-					</DialogButton>
-					<DialogButton
+				<ResponsiveControlGroup>
+					<TextField
+						value={overridePath}
 						disabled={busy !== undefined}
-						onClick={() => void saveOverride('')}
-					>
-						Clear override
-					</DialogButton>
-				</div>
+						style={fullWidthControlStyle}
+						onChange={(event) => setOverridePath(event.currentTarget.value)}
+					/>
+					<ResponsiveActionRow>
+						<DialogButton
+							disabled={busy !== undefined || overridePath.length === 0}
+							onClick={() => void saveOverride(overridePath)}
+							style={responsiveButtonStyle}
+						>
+							{busy === 'save' ? 'Saving...' : 'Save override'}
+						</DialogButton>
+						<DialogButton
+							disabled={busy !== undefined}
+							onClick={() => void saveOverride('')}
+							style={responsiveButtonStyle}
+						>
+							Clear override
+						</DialogButton>
+					</ResponsiveActionRow>
+				</ResponsiveControlGroup>
 			</Field>
 			<Field
 				label="Read-only Vortex backend probe"
 				description={probeDescription(probe)}
 				bottomSeparator="none"
 				childrenLayout="inline"
+				inlineWrap="shift-children-below"
 			>
 				<DialogButton
 					disabled={busy !== undefined || installation?.found !== true}

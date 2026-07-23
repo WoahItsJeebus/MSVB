@@ -1,6 +1,6 @@
 package.path = "backend/?.lua;backend/?/init.lua;" .. package.path
 
-package.preload.cjson = function()
+package.preload.json = function()
     return {
         encode = function(value)
             assert(type(value) == "string")
