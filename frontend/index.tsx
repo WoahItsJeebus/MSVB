@@ -1,18 +1,22 @@
 import { definePlugin, Field, IconsModule } from '@steambrew/client';
 
 import { getBackendHealth } from './backend/BackendClient';
+import { startLaunchInstrumentation } from './launch/LaunchInstrumentation';
+import type { LaunchInstrumentation } from './launch/LaunchInstrumentation';
 import { log } from './logging/Logger';
+import { VortexProbePanel } from './vortex/VortexProbePanel';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.1.0';
+const PLUGIN_VERSION = '0.3.0';
 
 let activeLoadId = 0;
+let launchInstrumentation: LaunchInstrumentation | undefined;
 
-async function verifyBackend(loadId: number): Promise<void> {
+async function verifyBackend(loadId: number): Promise<boolean> {
 	try {
 		const health = await getBackendHealth();
 		if (loadId !== activeLoadId) {
-			return;
+			return false;
 		}
 
 		if (health.pluginVersion !== PLUGIN_VERSION) {
@@ -26,10 +30,12 @@ async function verifyBackend(loadId: number): Promise<void> {
 			millenniumVersion: health.millenniumVersion,
 			backendStartedAt: health.backendStartedAt,
 		});
+		return true;
 	} catch (error: unknown) {
 		if (loadId === activeLoadId) {
 			log.error('backend.health.failed', error);
 		}
+		return false;
 	}
 }
 
@@ -39,21 +45,39 @@ export default definePlugin(() => {
 	log.info('frontend.loaded', {
 		pluginVersion: PLUGIN_VERSION,
 	});
-	void verifyBackend(loadId);
+	launchInstrumentation?.stop();
+	launchInstrumentation = undefined;
+
+	let instrumentation: LaunchInstrumentation | undefined;
+	void verifyBackend(loadId).then((backendHealthy) => {
+		if (!backendHealthy || loadId !== activeLoadId) {
+			return;
+		}
+
+		instrumentation = startLaunchInstrumentation();
+		launchInstrumentation = instrumentation;
+	});
 
 	return {
 		title: PLUGIN_NAME,
 		version: PLUGIN_VERSION,
 		icon: <IconsModule.Settings />,
 		content: (
-			<Field
-				label="Phase 0 ready"
-				description="The Lua backend health check runs when the plugin loads. Steam launch behavior is unchanged."
-				icon={<IconsModule.Settings />}
-				bottomSeparator="none"
-			/>
+			<>
+				<Field
+					label="Phase 1 diagnostics active"
+					description="Launch callbacks remain observation-only. The plugin does not cancel, delay, or replace Steam launch behavior."
+					icon={<IconsModule.Settings />}
+				/>
+				<VortexProbePanel />
+			</>
 		),
 		onDismount(): void {
+			instrumentation?.stop();
+			if (launchInstrumentation === instrumentation) {
+				launchInstrumentation = undefined;
+			}
+
 			if (activeLoadId === loadId) {
 				activeLoadId += 1;
 			}

@@ -13,7 +13,7 @@
 	},
 	"type": "module",
 	"name": "vortex-launch-bridge",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "A Millennium bridge for coordinating Steam game launches with Vortex.",
 	"main": "./frontend/index.jsx",
 	"license": "MIT"
