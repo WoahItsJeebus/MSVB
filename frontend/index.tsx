@@ -5,12 +5,14 @@ import { startLaunchInterception } from './launch/LaunchInterceptor';
 import type { LaunchInterception } from './launch/LaunchInterceptor';
 import { startLaunchInstrumentation } from './launch/LaunchInstrumentation';
 import type { LaunchInstrumentation } from './launch/LaunchInstrumentation';
-import { log } from './logging/Logger';
+import { log, setDiagnosticLogging } from './logging/Logger';
 import { GameMatchPanel } from './matching/GameMatchPanel';
+import { getPluginSettings } from './settings/SettingsClient';
+import { SettingsPanel } from './settings/SettingsPanel';
 import { VortexProbePanel } from './vortex/VortexProbePanel';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '0.6.0';
+const PLUGIN_VERSION = '0.7.0';
 
 let activeLoadId = 0;
 let launchInterception: LaunchInterception | undefined;
@@ -56,9 +58,19 @@ export default definePlugin(() => {
 
 	let interception: LaunchInterception | undefined;
 	let instrumentation: LaunchInstrumentation | undefined;
-	void verifyBackend(loadId).then((backendHealthy) => {
+	void verifyBackend(loadId).then(async (backendHealthy) => {
 		if (!backendHealthy || loadId !== activeLoadId) {
 			return;
+		}
+
+		try {
+			const settings = await getPluginSettings();
+			if (loadId !== activeLoadId) {
+				return;
+			}
+			setDiagnosticLogging(settings.diagnosticLogging);
+		} catch (error: unknown) {
+			log.error('settings.initial_load_failed', error);
 		}
 
 		instrumentation = startLaunchInstrumentation();
@@ -74,10 +86,11 @@ export default definePlugin(() => {
 		content: (
 			<>
 				<Field
-					label="Phase 5 Vortex profile activation active"
-					description="Eligible Library Details launches can select and activate a Vortex profile, wait for deployment confirmation, then resume the preserved Steam request."
+					label="Vortex Launch Bridge MVP active"
+					description="Eligible direct Steam launch routes can activate a Vortex profile, then use the exact preserved Steam request or a configured per-game executable."
 					icon={<IconsModule.Settings />}
 				/>
+				<SettingsPanel />
 				<VortexProbePanel />
 				<GameMatchPanel />
 			</>

@@ -4,7 +4,7 @@
 
 Phase 1 provides observation-only launch instrumentation in Steam's SharedJSContext. It does not cancel, continue, delay, or initiate a launch, and it does not display a modal.
 
-Phase 4 now implements a deliberately narrow direct-`RunGame` continuation path without changing the unverified route matrix below. Its separate scope, safety properties, and manual tests are documented in [launch-continuation-findings.md](launch-continuation-findings.md).
+Phase 4 implemented a deliberately narrow direct-`RunGame` continuation path. Phase 6 expands the safe direct-source allowlist without changing the unverified callback timing below; its final scope and manual matrix are documented in [phase6-hardening-settings.md](phase6-hardening-settings.md).
 
 No live Steam launch traces were available while implementing this phase. The build-time API findings below are confirmed against the installed `@steambrew/client` package, but event order and route behavior remain explicitly unverified until the manual matrix is run.
 

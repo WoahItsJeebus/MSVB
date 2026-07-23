@@ -3,7 +3,8 @@
 		"dev": "millennium-ttc --build dev",
 		"build": "millennium-ttc --build prod",
 		"test:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase4.ps1",
-		"test:phase5": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase5.ps1"
+		"test:phase5": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase5.ps1",
+		"test:phase6": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-phase6.ps1"
 	},
 	"devDependencies": {
 		"@steambrew/api": "^5.8.4",
@@ -15,7 +16,7 @@
 	},
 	"type": "module",
 	"name": "vortex-launch-bridge",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "A Millennium bridge for coordinating Steam game launches with Vortex.",
 	"main": "./frontend/index.jsx",
 	"license": "MIT"

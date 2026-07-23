@@ -33,7 +33,7 @@ export function ProfileChoiceModal({
 			onEscKeypress={onDismiss}
 		>
 			<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '560px' }}>
-				<div>Select the Vortex profile to activate before Steam starts the game.</div>
+				<div>Select the Vortex profile to activate before the configured launch target starts.</div>
 				<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 					{profiles.map((profile) => (
 						<DialogButton key={profile.id} onClick={() => onSelect(profile)}>

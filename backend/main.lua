@@ -1,4 +1,5 @@
 local cjson = require("cjson")
+local fs = require("fs")
 local log = require("logging")
 local millennium = require("millennium")
 local detection = require("vortex.detection")
@@ -7,8 +8,10 @@ local settings = require("settings.settings")
 local steam_manifests = require("steam.manifests")
 local vortex_cli = require("vortex.cli")
 local vortex_launcher = require("vortex.launcher")
+local command_line = require("util.command_line")
+local windows = require("util.windows")
 
-local PLUGIN_VERSION = "0.6.0"
+local PLUGIN_VERSION = "0.7.0"
 local backend_started_at = os.time()
 
 local function encode_response(value)
@@ -213,6 +216,225 @@ local function app_id_number(value)
         return nil
     end
     return numeric
+end
+
+function get_plugin_settings()
+    return encode_response({
+        ok = true,
+        settings = settings.get_public_settings(),
+    })
+end
+
+function update_plugin_settings(
+    always_ask,
+    remember_choice_per_game,
+    vortex_activation_timeout_ms,
+    diagnostic_logging
+)
+    local saved, save_error = settings.update_general(
+        always_ask,
+        remember_choice_per_game,
+        vortex_activation_timeout_ms,
+        diagnostic_logging
+    )
+    if not saved then
+        log.error("settings.general.save_failed", {})
+        return encode_response({
+            ok = false,
+            error = save_error or "The plugin settings could not be saved.",
+        })
+    end
+
+    log.info("settings.general.saved", {
+        alwaysAsk = always_ask,
+        rememberChoicePerGame = remember_choice_per_game,
+        vortexActivationTimeoutMs = vortex_activation_timeout_ms,
+        diagnosticLogging = diagnostic_logging,
+    })
+    return encode_response({
+        ok = true,
+        settings = settings.get_public_settings(),
+    })
+end
+
+function get_game_launch_settings(steam_app_id)
+    local game_settings, settings_error =
+        settings.get_game_launch_settings(steam_app_id)
+    if game_settings == nil then
+        return encode_response({
+            ok = false,
+            error = settings_error,
+        })
+    end
+    return encode_response({
+        ok = true,
+        game = game_settings,
+    })
+end
+
+function set_game_launch_settings(
+    steam_app_id,
+    preferred_profile_id,
+    preferred_launch_target,
+    custom_executable,
+    custom_arguments
+)
+    local saved, save_error = settings.set_game_launch_settings(
+        steam_app_id,
+        preferred_profile_id,
+        preferred_launch_target,
+        custom_executable,
+        custom_arguments
+    )
+    if not saved then
+        log.warn("settings.game.save_rejected", {
+            steamAppId = app_id_number(steam_app_id),
+            customExecutableRedacted =
+                type(custom_executable) == "string" and
+                custom_executable ~= "",
+            customArgumentsRedacted =
+                type(custom_arguments) == "string" and
+                custom_arguments ~= "",
+        })
+        return encode_response({
+            ok = false,
+            error = save_error or "The per-game settings could not be saved.",
+        })
+    end
+
+    local game_settings = settings.get_game_launch_settings(steam_app_id)
+    log.info("settings.game.saved", {
+        steamAppId = game_settings.steamAppId,
+        preferredLaunchTarget = game_settings.preferredLaunchTarget,
+        preferredProfileConfigured =
+            game_settings.preferredProfileId ~= nil,
+        customExecutableRedacted =
+            game_settings.customExecutable ~= nil,
+        customArgumentsRedacted = game_settings.customArguments ~= "",
+    })
+    return encode_response({
+        ok = true,
+        game = game_settings,
+    })
+end
+
+function remember_launch_choice(steam_app_id, choice, vortex_profile_id)
+    local saved, save_error = settings.remember_launch_choice(
+        steam_app_id,
+        choice,
+        vortex_profile_id
+    )
+    if not saved then
+        log.error("settings.remembered_choice.save_failed", {
+            steamAppId = app_id_number(steam_app_id),
+        })
+        return encode_response({
+            ok = false,
+            error = save_error or "The launch choice could not be remembered.",
+        })
+    end
+
+    log.info("settings.remembered_choice.saved", {
+        steamAppId = app_id_number(steam_app_id),
+        choice = choice,
+        profileIdRedacted =
+            type(vortex_profile_id) == "string" and
+            vortex_profile_id ~= "",
+        rememberingEnabled = settings.get().rememberChoicePerGame == true,
+    })
+    return encode_response({ ok = true })
+end
+
+function clear_remembered_choices()
+    local saved, save_error = settings.clear_remembered_choices()
+    if not saved then
+        log.error("settings.remembered_choices.clear_failed", {})
+        return encode_response({
+            ok = false,
+            error = save_error or "Remembered launch choices could not be cleared.",
+        })
+    end
+
+    log.info("settings.remembered_choices.cleared", {})
+    return encode_response({ ok = true })
+end
+
+function launch_configured_target(steam_app_id)
+    local game_settings, settings_error =
+        settings.get_game_launch_settings(steam_app_id)
+    if game_settings == nil then
+        return encode_response({
+            ok = false,
+            started = false,
+            target = "custom",
+            error = settings_error,
+        })
+    end
+    if game_settings.preferredLaunchTarget ~= "custom" then
+        return encode_response({
+            ok = false,
+            started = false,
+            target = "steam",
+            error = "This game is not configured to use a custom launch target.",
+        })
+    end
+
+    local executable = game_settings.customExecutable
+    if type(executable) ~= "string" or executable == "" or
+        executable:lower():sub(-4) ~= ".exe" or
+        (executable:match("^[A-Za-z]:[\\/]") == nil and
+            executable:match("^\\\\") == nil) or
+        not fs.is_file(executable) then
+        log.warn("launch.custom_target.invalid", {
+            steamAppId = game_settings.steamAppId,
+            executablePathRedacted = executable ~= nil,
+        })
+        return encode_response({
+            ok = false,
+            started = false,
+            target = "custom",
+            error = "The configured custom executable is no longer available.",
+        })
+    end
+
+    local arguments, arguments_error =
+        command_line.parse(game_settings.customArguments)
+    if arguments == nil then
+        return encode_response({
+            ok = false,
+            started = false,
+            target = "custom",
+            error = arguments_error,
+        })
+    end
+
+    local result = windows.start_process(executable, arguments)
+    local response = {
+        ok = result.started == true,
+        started = result.started == true,
+        target = "custom",
+        processId = result.processId,
+        durationMs = result.durationMs,
+        error = result.error,
+    }
+    if response.ok then
+        log.info("launch.custom_target.started", {
+            steamAppId = game_settings.steamAppId,
+            argumentCount = #arguments,
+            executablePathRedacted = true,
+            argumentsRedacted = true,
+            processId = result.processId,
+        })
+    else
+        log.warn("launch.custom_target.failed", {
+            steamAppId = game_settings.steamAppId,
+            argumentCount = #arguments,
+            executablePathRedacted = true,
+            argumentsRedacted = true,
+            errorCode = result.errorCode,
+        })
+    end
+    return encode_response(response)
 end
 
 local function unresolved_match(app_id, warning)

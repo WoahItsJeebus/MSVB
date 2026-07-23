@@ -176,7 +176,7 @@ export function GameMatchPanel() {
 	return (
 		<>
 			<Field
-				label="Phase 3 game matching"
+				label="Game matching diagnostics"
 				description={resultDescription(installation, match, status)}
 				childrenLayout="below"
 			>

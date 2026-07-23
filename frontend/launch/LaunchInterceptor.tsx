@@ -11,6 +11,14 @@ import {
 import { log } from '../logging/Logger';
 import { matchVortexGame } from '../matching/MatchClient';
 import type { VortexGameMatch } from '../matching/MatchTypes';
+import { resolveLaunchPolicy } from '../settings/LaunchPolicy';
+import {
+	getGameLaunchSettings,
+	getPluginSettings,
+	launchConfiguredTarget,
+	rememberLaunchChoice,
+} from '../settings/SettingsClient';
+import type { GameLaunchSettings, PluginSettings } from '../settings/SettingsTypes';
 import { ActivationErrorModal } from '../ui/ActivationErrorModal';
 import { ActivationProgressModal } from '../ui/ActivationProgressModal';
 import { LaunchChoiceModal } from '../ui/LaunchChoiceModal';
@@ -40,12 +48,16 @@ type CancellationReason =
 	| 'dismissed'
 	| 'profile-selection-dismissed'
 	| 'activation-cancelled'
-	| 'activation-failure-cancelled';
+	| 'activation-failure-cancelled'
+	| 'target-failure-cancelled'
+	| 'continuation-failure-cancelled';
 
 interface PendingLaunch {
 	request: SteamLaunchRequest;
 	state: PendingState;
 	duplicateCount: number;
+	pluginSettings?: PluginSettings;
+	gameSettings?: GameLaunchSettings;
 	modal?: ShowModalResult;
 }
 
@@ -55,7 +67,26 @@ export interface LaunchInterception {
 	stop(): void;
 }
 
-const SUPPORTED_LAUNCH_SOURCE = ELaunchSource._2ftLibraryDetails;
+const SUPPORTED_LAUNCH_SOURCES = new Set<ELaunchSource>([
+	ELaunchSource._2ftLibraryDetails,
+	ELaunchSource._2ftLibraryListView,
+	ELaunchSource._2ftLibraryGrid,
+	ELaunchSource._2ftMiniModeList,
+	ELaunchSource._10ft,
+	ELaunchSource.DashAppLaunchCmdLine,
+	ELaunchSource.DashGameIdLaunchCmdLine,
+	ELaunchSource.RunByGameDir,
+	ELaunchSource.SubCmdRunDashGame,
+	ELaunchSource.SteamURL_Launch,
+	ELaunchSource.SteamURL_Run,
+	ELaunchSource.SteamURL_RunGame,
+	ELaunchSource.SteamURL_RunGameIdOrJumplist,
+	ELaunchSource.SteamURL_RunSafe,
+	ELaunchSource.TrayIcon,
+	ELaunchSource.LibraryLeftColumnContextMenu,
+	ELaunchSource.LibraryLeftColumnDoubleClick,
+	ELaunchSource.AppPortraitContextMenu,
+]);
 const MATCH_DECISION_TIMEOUT_MS = 20_000;
 const CANCELLED_RETRY_WINDOW_MS = 5_000;
 
@@ -148,6 +179,59 @@ export function startLaunchInterception(): LaunchInterception {
 		}
 	}
 
+	function rememberChoiceSafely(
+		pending: PendingLaunch,
+		choice: 'steam' | 'vortex',
+		profileId = '',
+	): void {
+		if (pending.pluginSettings?.rememberChoicePerGame !== true) {
+			return;
+		}
+		void rememberLaunchChoice(
+			pending.request.numericAppId,
+			choice,
+			profileId,
+		).catch((error: unknown) => {
+			log.error('settings.remembered_choice.bridge_failed', error, {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				choice,
+				profileIdRedacted: profileId.length > 0,
+			});
+		});
+	}
+
+	function showRecoveryFailure(
+		pending: PendingLaunch,
+		title: string,
+		message: string,
+		warning: string | undefined,
+		continueReason: string,
+		cancelReason: CancellationReason,
+	): void {
+		if (!isCurrent(pending) || !active) {
+			removePending(pending);
+			return;
+		}
+
+		pending.state = 'failed';
+		closeModal(pending);
+		pending.modal = showModal(
+			<ActivationErrorModal
+				message={message}
+				warning={warning}
+				onContinueWithSteam={() => continueWithSteam(pending, continueReason)}
+				onCancel={() => cancelPending(pending, cancelReason)}
+			/>,
+			undefined,
+			{
+				strTitle: title,
+				bHideMainWindowForPopouts: false,
+				bNeverPopOut: true,
+			},
+		);
+	}
+
 	function continueWithSteam(pending: PendingLaunch, reason: string): void {
 		if (!isCurrent(pending) || pending.state === 'continuing-steam') {
 			return;
@@ -174,23 +258,97 @@ export function startLaunchInterception(): LaunchInterception {
 				steamAppId: pending.request.numericAppId,
 				reason,
 			});
-		} finally {
-			removePending(pending);
+			showRecoveryFailure(
+				pending,
+				'Steam launch failed',
+				'Steam did not accept the preserved launch request. You can retry it or cancel.',
+				undefined,
+				'continuation-failure-user-retried',
+				'continuation-failure-cancelled',
+			);
+			return;
 		}
+		removePending(pending);
 	}
 
-	function launchAfterVortexActivation(pending: PendingLaunch): void {
+	async function launchAfterVortexActivation(
+		pending: PendingLaunch,
+		profile: VortexProfile,
+	): Promise<void> {
 		if (!isCurrent(pending)) {
 			return;
 		}
 
 		pending.state = 'launching';
 		closeModal(pending);
+		if (pending.gameSettings?.preferredLaunchTarget === 'custom') {
+			try {
+				const result = await launchConfiguredTarget(
+					pending.request.numericAppId,
+				);
+				if (!isCurrent(pending) || !active) {
+					return;
+				}
+				if (!result.ok || !result.started || result.target !== 'custom') {
+					log.warn('launch.post_activation_custom_target_failed', {
+						requestId: pending.request.requestId,
+						steamAppId: pending.request.numericAppId,
+						processStarted: result.started,
+						executablePathRedacted: true,
+						argumentsRedacted: true,
+					});
+					showRecoveryFailure(
+						pending,
+						'Custom launch tool failed',
+						result.error ?? 'The configured custom launch tool did not start.',
+						undefined,
+						'custom-target-failed-user-continued',
+						'target-failure-cancelled',
+					);
+					return;
+				}
+
+				pending.state = 'completed';
+				rememberChoiceSafely(pending, 'vortex', profile.id);
+				log.info('launch.post_activation_custom_target_started', {
+					requestId: pending.request.requestId,
+					steamAppId: pending.request.numericAppId,
+					processId: result.processId,
+					executablePathRedacted: true,
+					argumentsRedacted: true,
+					activationConfirmed: true,
+					deploymentConfirmed: true,
+				});
+				removePending(pending);
+				return;
+			} catch (error: unknown) {
+				if (!isCurrent(pending)) {
+					return;
+				}
+				interceptionEnabled = false;
+				log.error('launch.post_activation_custom_target_bridge_failed', error, {
+					requestId: pending.request.requestId,
+					steamAppId: pending.request.numericAppId,
+					executablePathRedacted: true,
+					argumentsRedacted: true,
+					futureLaunchesPassThrough: true,
+				});
+				showRecoveryFailure(
+					pending,
+					'Custom launch tool failed',
+					'The custom launch tool could not be started because the plugin backend is unavailable.',
+					undefined,
+					'custom-target-bridge-failed-user-continued',
+					'target-failure-cancelled',
+				);
+				return;
+			}
+		}
+
 		try {
-			// Phase 5 intentionally uses the preserved Steam request as its first
-			// launch target. Alternate Vortex tools remain a later-phase concern.
 			launcher.continueLaunch(pending.request);
 			pending.state = 'completed';
+			rememberChoiceSafely(pending, 'vortex', profile.id);
 			log.info('launch.post_activation_steam_target_started', {
 				requestId: pending.request.requestId,
 				steamAppId: pending.request.numericAppId,
@@ -207,9 +365,17 @@ export function startLaunchInterception(): LaunchInterception {
 				requestId: pending.request.requestId,
 				steamAppId: pending.request.numericAppId,
 			});
-		} finally {
-			removePending(pending);
+			showRecoveryFailure(
+				pending,
+				'Steam launch failed',
+				'Vortex activation completed, but Steam did not accept the preserved launch request.',
+				undefined,
+				'post-activation-steam-failed-user-retried',
+				'target-failure-cancelled',
+			);
+			return;
 		}
+		removePending(pending);
 	}
 
 	function cancelPending(pending: PendingLaunch, reason: CancellationReason): void {
@@ -236,27 +402,13 @@ export function startLaunchInterception(): LaunchInterception {
 		message: string,
 		warning?: string,
 	): void {
-		if (!isCurrent(pending) || !active) {
-			return;
-		}
-
-		pending.state = 'failed';
-		closeModal(pending);
-		pending.modal = showModal(
-			<ActivationErrorModal
-				message={message}
-				warning={warning}
-				onContinueWithSteam={() =>
-					continueWithSteam(pending, 'activation-failed-user-continued')
-				}
-				onCancel={() => cancelPending(pending, 'activation-failure-cancelled')}
-			/>,
-			undefined,
-			{
-				strTitle: 'Vortex activation failed',
-				bHideMainWindowForPopouts: false,
-				bNeverPopOut: true,
-			},
+		showRecoveryFailure(
+			pending,
+			'Vortex activation failed',
+			message,
+			warning,
+			'activation-failed-user-continued',
+			'activation-failure-cancelled',
 		);
 	}
 
@@ -335,7 +487,7 @@ export function startLaunchInterception(): LaunchInterception {
 				readinessSignal: result.readinessSignal,
 				identifiersRedacted: true,
 			});
-			launchAfterVortexActivation(pending);
+			void launchAfterVortexActivation(pending, profile);
 		} catch (error: unknown) {
 			if (!isCurrent(pending)) {
 				return;
@@ -372,6 +524,13 @@ export function startLaunchInterception(): LaunchInterception {
 				pending,
 				'No valid Vortex profile remains available for this game.',
 			);
+			return;
+		}
+		const preferredProfile = profiles.find(
+			(profile) => profile.id === pending.gameSettings?.preferredProfileId,
+		);
+		if (preferredProfile !== undefined) {
+			void activateProfile(pending, match, preferredProfile);
 			return;
 		}
 		if (profiles.length === 1) {
@@ -414,13 +573,53 @@ export function startLaunchInterception(): LaunchInterception {
 			return;
 		}
 
+		const profiles = match.profiles.filter(
+			(profile) => profile.gameId === match.vortexGameId,
+		);
+		if (profiles.length === 0) {
+			continueWithSteam(pending, 'no-valid-vortex-profiles');
+			return;
+		}
+		if (pending.pluginSettings === undefined || pending.gameSettings === undefined) {
+			continueWithSteam(pending, 'settings-unavailable-fail-open');
+			return;
+		}
+		const decision = resolveLaunchPolicy(
+			pending.pluginSettings,
+			pending.gameSettings,
+			profiles,
+		);
+		if (decision.kind === 'steam') {
+			log.info('launch.remembered_choice.applied', {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				choice: 'steam',
+			});
+			continueWithSteam(pending, 'remembered-steam-choice');
+			return;
+		}
+		if (decision.kind === 'vortex') {
+			pending.state = 'selecting-profile';
+			log.info('launch.remembered_choice.applied', {
+				requestId: pending.request.requestId,
+				steamAppId: pending.request.numericAppId,
+				choice: 'vortex',
+				profileIdRedacted: true,
+			});
+			void activateProfile(pending, match, decision.profile);
+			return;
+		}
+
 		pending.state = 'awaiting-user';
 		pending.modal = showModal(
 			<LaunchChoiceModal
 				steamAppId={pending.request.numericAppId}
 				profileCount={match.profiles.length}
 				onLaunchWithVortex={() => beginVortexFlow(pending, match)}
-				onContinueWithSteam={() => continueWithSteam(pending, 'user-selected-steam')}
+				onContinueWithSteam={() => {
+					rememberChoiceSafely(pending, 'steam');
+					continueWithSteam(pending, 'user-selected-steam');
+				}}
 				onDismiss={() => cancelPending(pending, 'dismissed')}
 			/>,
 			undefined,
@@ -442,8 +641,12 @@ export function startLaunchInterception(): LaunchInterception {
 
 	async function checkVortex(pending: PendingLaunch): Promise<void> {
 		try {
-			const match = await withTimeout(
-				matchVortexGame(pending.request.numericAppId),
+			const [match, pluginSettings, gameSettings] = await withTimeout(
+				Promise.all([
+					matchVortexGame(pending.request.numericAppId),
+					getPluginSettings(),
+					getGameLaunchSettings(pending.request.numericAppId),
+				]),
 				MATCH_DECISION_TIMEOUT_MS,
 			);
 			if (!isCurrent(pending) || !active) {
@@ -452,6 +655,11 @@ export function startLaunchInterception(): LaunchInterception {
 			if (match.steamAppId !== pending.request.numericAppId) {
 				throw new Error('The backend returned a match for a different Steam AppID.');
 			}
+			if (gameSettings.steamAppId !== pending.request.numericAppId) {
+				throw new Error('The backend returned settings for a different Steam AppID.');
+			}
+			pending.pluginSettings = pluginSettings;
+			pending.gameSettings = gameSettings;
 			showChoice(pending, match);
 		} catch (error: unknown) {
 			if (!isCurrent(pending)) {
@@ -487,7 +695,7 @@ export function startLaunchInterception(): LaunchInterception {
 		if (
 			!active ||
 			!interceptionEnabled ||
-			request.launchSource !== SUPPORTED_LAUNCH_SOURCE
+			!SUPPORTED_LAUNCH_SOURCES.has(request.launchSource)
 		) {
 			return callOriginalResult();
 		}
@@ -567,10 +775,12 @@ export function startLaunchInterception(): LaunchInterception {
 	}
 
 	log.info('launch.interception.started', {
-		phase: 5,
+		phase: 6,
 		route: 'RunGame',
-		launchSource: SUPPORTED_LAUNCH_SOURCE,
-		launchSourceName: ELaunchSource[SUPPORTED_LAUNCH_SOURCE],
+		supportedLaunchSources: [...SUPPORTED_LAUNCH_SOURCES].map((source) => ({
+			value: source,
+			name: ELaunchSource[source],
+		})),
 		oneShotBypass: true,
 		cancelLaunchUsed: false,
 	});

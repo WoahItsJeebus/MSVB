@@ -2,8 +2,12 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type LogFields = Readonly<Record<string, unknown>>;
 
 const LOG_PREFIX = '[VLB]';
+let diagnosticLoggingEnabled = false;
 
 function emit(level: LogLevel, event: string, fields: LogFields = {}): void {
+	if (level === 'debug' && !diagnosticLoggingEnabled) {
+		return;
+	}
 	const record = {
 		timestamp: new Date().toISOString(),
 		component: 'frontend',
@@ -27,6 +31,10 @@ function emit(level: LogLevel, event: string, fields: LogFields = {}): void {
 			console.error(message);
 			break;
 	}
+}
+
+export function setDiagnosticLogging(enabled: boolean): void {
+	diagnosticLoggingEnabled = enabled;
 }
 
 function errorMessage(error: unknown): string {

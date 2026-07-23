@@ -97,7 +97,7 @@ export class LaunchDiagnostics {
 			trace.state = 'completed';
 		}
 
-		log.info('launch.callback.observed', {
+		log.debug('launch.callback.observed', {
 			sessionId: this.sessionId,
 			sequence: this.sequence,
 			traceId: trace.id,
@@ -118,7 +118,7 @@ export class LaunchDiagnostics {
 		this.tracesByAction.clear();
 		this.recentTraceByApp.clear();
 
-		log.info('launch.diagnostics.stopped', {
+		log.debug('launch.diagnostics.stopped', {
 			sessionId: this.sessionId,
 			callbackCount: this.sequence,
 		});
@@ -194,7 +194,7 @@ export class LaunchDiagnostics {
 			return;
 		}
 
-		log.info('launch.callback.duplicates_suppressed', {
+		log.debug('launch.callback.duplicates_suppressed', {
 			sessionId: this.sessionId,
 			traceId: duplicate.traceId,
 			callback: duplicate.callback,

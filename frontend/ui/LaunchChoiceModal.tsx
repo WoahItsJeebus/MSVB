@@ -34,7 +34,7 @@ export function LaunchChoiceModal({
 				</div>
 				<div>
 					Launching with Vortex activates a selected profile, waits for Vortex to confirm its
-					deployment work, then resumes this Steam launch.
+					deployment work, then starts this game's configured launch target.
 				</div>
 				<div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
 					<DialogButton onClick={onLaunchWithVortex}>Launch with Vortex</DialogButton>

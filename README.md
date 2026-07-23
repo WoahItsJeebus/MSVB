@@ -2,9 +2,7 @@
 
 A Windows-first [Millennium](https://github.com/SteamClientHomebrew/Millennium) plugin for coordinating Steam launches with Vortex-managed games.
 
-The repository currently contains Phase 0 through Phase 5: plugin lifecycle and health checks, structured logging, Steam launch diagnostics, read-only Vortex detection/state probing, deterministic Steam-to-Vortex matching, one narrow Steam modal/continuation route, profile selection, confirmed Vortex activation, and post-activation Steam launch.
-
-Phase 6 has not started. The plugin does not support additional interception routes, remembered choices, custom launch tools, or a settings UI.
+The repository contains the complete Phase 0 through Phase 6 MVP: plugin lifecycle and health checks, redacted diagnostics, read-only Vortex probing, deterministic matching, exact Steam continuation, confirmed profile activation, additional direct Steam routes, opt-in remembered choices, per-game custom launch tools, recovery dialogs, settings UI, and automated pure-module tests.
 
 ## Requirements
 
@@ -50,9 +48,11 @@ New-Item -ItemType Junction -Path $linkPath -Target $checkoutPath
 
 If Steam is installed elsewhere, replace `$steamPath` with that installation directory. Restart Steam after creating the link, then enable **Vortex Launch Bridge** in Millennium.
 
-## Phase 5 behavior
+## Phase 6 MVP behavior
 
-Phase 5 retains the deliberately narrow Phase 4 interception boundary: only direct `SteamClient.Apps.RunGame` calls whose launch source is `_2ftLibraryDetails` are eligible. All other launch sources pass through unchanged.
+The bridge intercepts only direct `SteamClient.Apps.RunGame` calls. It supports Library Details, list/grid/minimode, Big Picture, command-line, Steam URL run/launch, tray, library context-menu/double-click, and portrait-context-menu source values. Automatic/internal sources such as install completion, downloads, remote streaming, lobby/party joins, DRM recovery, and already-running discovery pass through unchanged.
+
+Callback-based Steam action APIs remain observation-only because their pre-process timing has not been established. A source is supported only when it reaches the patched `RunGame` property; routes that bypass it remain untouched.
 
 The complete original tuple is held in memory:
 
@@ -72,7 +72,11 @@ When profiles match, the Steam-native modal offers exactly:
 
 Choosing Steam replays the request once. Closing the launch-choice modal, pressing Escape, or using another cancel gesture cancels the pending request.
 
-Choosing **Launch with Vortex** activates the only matching profile directly or opens a profile picker when several profiles exist. The backend starts Vortex with fixed `--game` and `--profile` arguments, then tails only newly written Vortex log data for the exact selected game/profile completion event. Vortex emits that event after its profile deployment chain completes. Only then does the frontend replay the preserved Steam request through the one-shot bypass.
+Choosing **Launch with Vortex** activates the only matching profile directly or opens a profile picker when several profiles exist. The backend starts Vortex with fixed `--game` and `--profile` arguments, then tails only newly written Vortex log data for the exact selected game/profile completion event. Vortex emits that event after its profile deployment chain completes. Only then does the frontend start the configured per-game target.
+
+The settings panel can opt in to remembered per-game decisions. **Always ask** is enabled by default and overrides every saved decision. With remembering enabled and Always ask disabled, a saved Steam choice replays the request; a saved Vortex choice runs only when its exact saved profile is still available. A stale profile returns to the modal instead of guessing.
+
+Each Steam AppID can use the preserved Steam request or an existing absolute `.exe` after confirmed Vortex activation. Custom arguments are parsed into separate `CreateProcessW` arguments without a command shell. Paths and arguments are redacted from normal and diagnostic logs. If the custom target or post-activation Steam target fails, the request remains recoverable through `Continue launching with Steam...` or `Cancel`.
 
 While activation is pending, a progress dialog can cancel the held Steam launch. If activation exits early or times out, the error dialog offers exactly:
 
@@ -85,29 +89,35 @@ Current Vortex 2.3.0 accepts `--profile` on a cold start, but its second-instanc
 
 See [vortex-activation-findings.md](docs/vortex-activation-findings.md) for the readiness contract and current Vortex limitation.
 
-## Verify Phase 0 through Phase 5 manually
+## Verify the Phase 6 MVP manually
 
 1. Run `bun run build` and confirm it exits successfully.
 2. Start Steam and enable the plugin.
-3. Confirm the plugin appears as **Vortex Launch Bridge** version `0.6.0`.
+3. Confirm the plugin appears as **Vortex Launch Bridge** version `0.7.0`.
 4. Confirm backend health succeeds and Phase 1 observers register.
 5. Confirm Vortex detection and the read-only probe behave as documented in [vortex-probe-findings.md](docs/vortex-probe-findings.md).
 6. Confirm Steam path resolution and deterministic matching behave as documented in [game-matching-findings.md](docs/game-matching-findings.md).
-7. Confirm `launch.interception.started` reports phase `5`, route `RunGame`, and source `_2ftLibraryDetails`.
+7. Confirm `launch.interception.started` reports phase `6`, route `RunGame`, and the supported source list.
 8. From Library Details, launch a game without matching Vortex profiles. Confirm no modal appears and Steam starts it once.
 9. Launch a matching game with profiles. Confirm exactly one modal appears.
 10. Select **Continue launching with Steam...** and confirm Steam starts the game exactly once.
 11. Repeat and dismiss with the close icon, then with Escape. Confirm the pending launch is cancelled.
-12. With Vortex closed, repeat and select **Launch with Vortex** for a game with one profile. Confirm Vortex starts, the progress dialog remains until deployment confirmation, and Steam starts the preserved request exactly once.
-13. Repeat with several profiles. Confirm the profile picker appears and the selected profile becomes active before Steam starts the game.
+12. With Vortex closed and the default Steam target configured, repeat and select **Launch with Vortex** for a game with one profile. Confirm Vortex starts, the progress dialog remains until deployment confirmation, and Steam starts the preserved request exactly once.
+13. Repeat with several profiles. Confirm the profile picker appears and the selected profile becomes active before the configured target starts.
 14. Start Vortex manually while the initial launch-choice modal is open, then select **Launch with Vortex**. Confirm the activation times out into the error dialog with `Continue launching with Steam...` and `Cancel`.
 15. Test each error choice. Confirm Continue replays once and Cancel does not start the game.
 16. Dismiss the profile picker and progress dialog. Confirm each dismissal cancels the pending Steam launch.
 17. Rapidly click Play twice and confirm only one modal appears.
 18. Disable the plugin while a request is checking, prompting, or activating. Confirm the held request fails open once and every hook unregisters.
-19. Test the other Phase 1 launch routes and confirm Phase 5 leaves unsupported sources unchanged.
+19. Test each supported direct route and confirm matching games receive one prompt while unmatched games start once without a prompt.
+20. Confirm install-complete, download, streaming, lobby/party, DRM, and already-running sources pass through.
+21. Enable remembering, disable Always ask, save Steam and Vortex choices in turn, and confirm each applies only to its AppID.
+22. Remove or rename a remembered Vortex profile and confirm the next launch prompts instead of selecting another profile.
+23. Configure a harmless custom `.exe` with quoted arguments. Confirm it starts only after Vortex activation and Steam is not replayed.
+24. Make the custom executable unavailable after saving. Confirm the recovery dialog offers `Continue launching with Steam...` and `Cancel`.
+25. Enable diagnostic logging and confirm detailed callback records appear; disable it and confirm they stop while operational warnings/errors remain.
 
-The full Phase 4 state machine, safety rules, structured events, and manual route matrix are in [launch-continuation-findings.md](docs/launch-continuation-findings.md).
+The final route, settings, launch-target, and recovery contracts are in [phase6-hardening-settings.md](docs/phase6-hardening-settings.md).
 
 ## Vortex state and matching
 
@@ -122,7 +132,7 @@ The read-only Vortex command allowlist remains:
 --get settings.gameMode.discovered
 ```
 
-Phase 5 adds one fixed activation command shape:
+Profile activation uses one fixed command shape:
 
 ```text
 --game <matched-game-id> --profile <selected-profile-id>
@@ -140,10 +150,11 @@ lua tests/game_matching.lua
 lua tests/vortex_launcher.lua
 npm.cmd run test:phase4
 npm.cmd run test:phase5
+npm.cmd run test:phase6
 ```
 
-`tests/launch_continuation.ts` covers exact replay and one-shot bypass behavior. `tests/vortex_launcher.lua` covers exact readiness-event matching, and `tests/vortex_activation.ts` validates the frontend activation contract. The TypeScript runners compile only the relevant pure modules into the ignored `.millennium` build directory before executing them with Node.
+`test:phase6` runs exact replay, activation, remembered-policy, custom argument parsing, Vortex-state parsing, deterministic matching, and activation-signal coverage. The TypeScript runner compiles only pure modules into the ignored `.millennium` build directory before executing them with Node.
 
 ## Scope
 
-Phase 6 has intentionally not been started. There are no additional Steam launch routes, remembered decisions, preferred profiles, custom tools/executables, custom arguments, expanded recovery behavior, or settings UI. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the remaining phase.
+The MVP is complete through the final phase. It still does not purge or disable deployed mods, edit Vortex state, manage profiles or downloads, support non-Steam games, inject into processes, or claim that a Steam continuation changes the modded state on disk.
