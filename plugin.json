@@ -1,0 +1,10 @@
+{
+	"$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+	"name": "vortex-launch-bridge",
+	"common_name": "Vortex Launch Bridge",
+	"description": "Coordinates Steam game launches with Vortex-managed profiles.",
+	"version": "0.1.0",
+	"useBackend": true,
+	"backendType": "lua",
+	"webkitApiVersion": "2.0.0"
+}
