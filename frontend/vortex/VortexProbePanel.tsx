@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { log } from '../logging/Logger';
 import {
 	fullWidthControlStyle,
+	paddedActionButtonStyle,
 	ResponsiveActionRow,
 	ResponsiveControlGroup,
 	responsiveButtonStyle,
@@ -142,7 +143,11 @@ export function VortexProbePanel() {
 				childrenLayout="inline"
 				inlineWrap="shift-children-below"
 			>
-				<DialogButton disabled={busy !== undefined} onClick={() => void detect()}>
+				<DialogButton
+					disabled={busy !== undefined}
+					onClick={() => void detect()}
+					style={paddedActionButtonStyle}
+				>
 					{busy === 'detect' ? 'Detecting...' : 'Detect Vortex'}
 				</DialogButton>
 			</Field>
@@ -186,6 +191,7 @@ export function VortexProbePanel() {
 				<DialogButton
 					disabled={busy !== undefined || installation?.found !== true}
 					onClick={() => void executeProbe()}
+					style={paddedActionButtonStyle}
 				>
 					{busy === 'probe' ? 'Probing...' : 'Run read-only probe'}
 				</DialogButton>

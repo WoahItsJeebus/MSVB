@@ -20,6 +20,19 @@ try {
 	}
 
 	$backendMain = Get-Content -LiteralPath 'backend\main.lua' -Raw
+	$packageVersion = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+	$manifestVersion = (Get-Content -LiteralPath 'plugin.json' -Raw | ConvertFrom-Json).version
+	$escapedVersion = [regex]::Escape($packageVersion)
+	$frontendIndexSource = Get-Content -LiteralPath 'frontend\index.tsx' -Raw
+	$readmeSource = Get-Content -LiteralPath 'README.md' -Raw
+	$changelogSource = Get-Content -LiteralPath 'CHANGELOG.md' -Raw
+	if ($manifestVersion -ne $packageVersion -or
+		$backendMain -notmatch "PLUGIN_VERSION\s*=\s*`"$escapedVersion`"" -or
+		$frontendIndexSource -notmatch "const PLUGIN_VERSION\s*=\s*'$escapedVersion'" -or
+		$readmeSource -notmatch "version-$escapedVersion-" -or
+		$changelogSource -notmatch "(?m)^## \[$escapedVersion\]") {
+		throw "Current version references must match package.json version $packageVersion."
+	}
 	if ($backendMain -notmatch 'pcall\(jit\.off\)') {
 		throw 'Backend must disable LuaJIT before loading plugin modules.'
 	}
@@ -93,6 +106,15 @@ try {
 			$panelSource -notmatch 'fullWidthControlStyle') {
 			throw "Settings panel '$panel' must use responsive full-width controls."
 		}
+	}
+
+	$responsiveControlsSource = Get-Content -LiteralPath 'frontend\ui\ResponsiveControls.tsx' -Raw
+	$vortexProbePanelSource = Get-Content -LiteralPath 'frontend\vortex\VortexProbePanel.tsx' -Raw
+	if ($responsiveControlsSource -notmatch 'paddedActionButtonStyle' -or
+		$responsiveControlsSource -notmatch "paddingLeft:\s*'16px'" -or
+		$responsiveControlsSource -notmatch "paddingRight:\s*'16px'" -or
+		([regex]::Matches($vortexProbePanelSource, 'style=\{paddedActionButtonStyle\}')).Count -ne 2) {
+		throw 'Vortex detection and read-only probe buttons must retain comfortable horizontal padding.'
 	}
 
 	$rpcHandlers = @(

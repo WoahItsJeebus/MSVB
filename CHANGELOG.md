@@ -6,6 +6,8 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 
 ### Fixed
 
+- Added consistent horizontal padding to the Vortex detection and read-only
+  probe buttons in the settings panel.
 - Accepted opaque Vortex profile IDs that begin with a hyphen, allowing valid
   generated profiles to reach Vortex activation.
 - Applied the compact action-button height to two-button recovery dialogs as
@@ -17,7 +19,7 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Started Vortex with its supported minimized flag so profile activation and
   deployment can run without leaving its main window visible.
 
-## [0.7.15] - 2026-07-23
+## [1.0.2] - 2026-07-24
 
 ### Fixed
 
@@ -54,7 +56,7 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Continuing through Steam does not undeploy Vortex-managed files and therefore does not guarantee an unmodded launch.
 - Only verified direct Steam launch sources are intercepted; unsupported and ambiguous routes pass through unchanged.
 
-[Unreleased]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.15...HEAD
-[0.7.15]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v0.7.15
+[Unreleased]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v1.0.2
 [0.7.14]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.13...v0.7.14
 [0.7.13]: https://github.com/WoahItsJeebus/MSVB/releases/tag/v0.7.13

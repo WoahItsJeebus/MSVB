@@ -1,6 +1,6 @@
 {
 	"name": "vortex-launch-bridge",
-	"version": "0.7.15",
+	"version": "1.0.2",
 	"description": "A Millennium plugin for coordinating Steam game launches with Vortex-managed profiles.",
 	"private": true,
 	"packageManager": "pnpm@10.34.5",

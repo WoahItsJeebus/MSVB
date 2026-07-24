@@ -27,6 +27,13 @@ export const responsiveButtonStyle: CSSProperties = {
 	minWidth: 0,
 };
 
+export const paddedActionButtonStyle: CSSProperties = {
+	flexShrink: 0,
+	paddingLeft: '16px',
+	paddingRight: '16px',
+	whiteSpace: 'nowrap',
+};
+
 interface ResponsiveControlsProps {
 	children: ReactNode;
 }
