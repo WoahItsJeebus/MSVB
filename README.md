@@ -12,7 +12,7 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 - Detects Vortex and reads its supported game/profile state without editing it.
 - Warms a background cache at plugin startup so eligible launch prompts appear without a long lookup delay.
 - Uses the game's Steam name and profile count in a native, theme-aware Steam confirmation dialog.
-- Activates a selected Vortex profile and waits for Vortex to confirm deployment before starting the configured target.
+- Activates a selected Vortex profile in Vortex's minimized background mode and waits for deployment confirmation before starting the configured target.
 - Preserves the exact intercepted Steam launch request when you choose **Continue launching with Steam...**
 - Supports optional remembered choices, preferred profiles, custom executables, custom arguments, and exact Steam AppID-to-Vortex game mappings.
 - Fails open before interception whenever eligibility cannot be established safely.

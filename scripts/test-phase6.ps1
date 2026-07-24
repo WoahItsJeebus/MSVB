@@ -76,8 +76,10 @@ try {
 
 	$steamModalChrome = Get-Content -LiteralPath 'frontend\ui\SteamModalChrome.tsx' -Raw
 	if ($steamModalChrome -notmatch 'height:\s*42px\s*!important' -or
-		$steamModalChrome -notmatch 'padding-inline:\s*14px\s*!important') {
-		throw 'Launch modal action buttons must retain compact height and horizontal padding.'
+		$steamModalChrome -notmatch 'padding-inline:\s*14px\s*!important' -or
+		$steamModalChrome -notmatch 'DialogTwoColLayout\s*>\s*button\.DialogButton' -or
+		$steamModalChrome -notmatch 'DialogThreeColLayout\s*>\s*button\.DialogButton') {
+		throw 'Two- and three-action launch modal buttons must retain compact sizing.'
 	}
 
 	$responsivePanels = @(

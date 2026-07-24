@@ -475,7 +475,11 @@ export function startLaunchInterception(): LaunchInterception {
 		});
 
 		try {
-			const result = await activateVortexProfile(match.vortexGameId, profile.id);
+			const result = await activateVortexProfile(
+				match.vortexGameId,
+				profile.id,
+				profile.isLastActive === true,
+			);
 			if (!isCurrent(pending) || !active) {
 				return;
 			}

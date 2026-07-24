@@ -272,27 +272,20 @@ try {
 	$capture = [bool]$request.capture
 	$timeoutMs = [Math]::Max(100, [Math]::Min(120000, [int]$request.timeout_ms))
 	$maximumBytes = [Math]::Max(4096, [Math]::Min(4194304, [int]$request.maximum_output_bytes))
-
-	$startInfo = New-Object System.Diagnostics.ProcessStartInfo
-	$startInfo.FileName = $executable
-	$startInfo.Arguments = $arguments -join ' '
-	$startInfo.UseShellExecute = $false
-	$startInfo.CreateNoWindow = $capture
-	$startInfo.RedirectStandardOutput = $capture
-	$startInfo.RedirectStandardError = $capture
-	if ($capture) {
-		$startInfo.StandardOutputEncoding = $utf8
-		$startInfo.StandardErrorEncoding = $utf8
-	}
-
 	$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-	$process = New-Object System.Diagnostics.Process
-	$process.StartInfo = $startInfo
-	if (-not $process.Start()) {
-		throw 'The process did not start.'
-	}
 
 	if (-not $capture) {
+		# Start-Process gives an interactive target independent standard
+		# handles. Using ProcessStartInfo here would let the target inherit this
+		# runner's captured handles and keep the outer broker blocked until the
+		# target itself exited.
+		$process = Start-Process `
+			-FilePath $executable `
+			-ArgumentList ($arguments -join ' ') `
+			-PassThru
+		if ($null -eq $process) {
+			throw 'The process did not start.'
+		}
 		@{
 			started = $true
 			processId = $process.Id
@@ -300,6 +293,22 @@ try {
 		} | ConvertTo-Json -Compress
 		$process.Dispose()
 		exit 0
+	}
+
+	$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+	$startInfo.FileName = $executable
+	$startInfo.Arguments = $arguments -join ' '
+	$startInfo.UseShellExecute = $false
+	$startInfo.CreateNoWindow = $true
+	$startInfo.RedirectStandardOutput = $true
+	$startInfo.RedirectStandardError = $true
+	$startInfo.StandardOutputEncoding = $utf8
+	$startInfo.StandardErrorEncoding = $utf8
+
+	$process = New-Object System.Diagnostics.Process
+	$process.StartInfo = $startInfo
+	if (-not $process.Start()) {
+		throw 'The process did not start.'
 	}
 
 	$stdoutTask = $process.StandardOutput.ReadToEndAsync()

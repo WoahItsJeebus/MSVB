@@ -70,6 +70,32 @@ assert(launcher.is_activation_signal(
 local invalid = launcher.activate("", "profile-a")
 assert(invalid.ok == false)
 assert(invalid.profileActivationRequested == false)
-assert(launcher.activate("--set", "profile-a").ok == false)
+
+local hyphenated_profile = launcher.activate(
+    "cyberpunk2077",
+    "-generated-profile"
+)
+assert(hyphenated_profile.ok == false)
+assert(hyphenated_profile.error == "unavailable in tests")
+
+local last_active_arguments = launcher.activation_arguments(
+    "cyberpunk2077",
+    "-generated-profile",
+    true
+)
+assert(#last_active_arguments == 3)
+assert(last_active_arguments[1] == "--game")
+assert(last_active_arguments[2] == "cyberpunk2077")
+assert(last_active_arguments[3] == "--start-minimized")
+
+local selected_arguments = launcher.activation_arguments(
+    "cyberpunk2077",
+    "-generated-profile",
+    false
+)
+assert(#selected_arguments == 5)
+assert(selected_arguments[3] == "--profile")
+assert(selected_arguments[4] == "-generated-profile")
+assert(selected_arguments[5] == "--start-minimized")
 
 print("Vortex launcher tests passed")

@@ -17,7 +17,7 @@ local READINESS_SIGNAL = "vortex-log-profile-switch"
 
 local function valid_identifier(value)
     return type(value) == "string" and value ~= "" and #value <= 256 and
-        value:sub(1, 1) ~= "-" and value:find("%c") == nil
+        value:find("%c") == nil
 end
 
 local function add_log_path(paths, seen, base)
@@ -161,7 +161,21 @@ local function failure_result(message, timeout_ms, fields)
     return result
 end
 
-function M.activate(game_id, profile_id)
+function M.activation_arguments(game_id, profile_id, profile_is_last_active)
+    local arguments = {
+        "--game",
+        game_id,
+    }
+    if profile_is_last_active ~= true then
+        arguments[#arguments + 1] = "--profile"
+        arguments[#arguments + 1] = profile_id
+    end
+    -- Vortex implements this flag by hiding its BrowserWindow after startup.
+    arguments[#arguments + 1] = "--start-minimized"
+    return arguments
+end
+
+function M.activate(game_id, profile_id, profile_is_last_active)
     local timeout_ms = settings.get().vortexActivationTimeoutMs
     if not valid_identifier(game_id) or not valid_identifier(profile_id) then
         return failure_result(
@@ -201,14 +215,17 @@ function M.activate(game_id, profile_id)
 
     local running_before = windows.is_process_running(PROCESS_NAME)
     local started_at = windows.monotonic_milliseconds()
+    -- Vortex 2.3.0's cold-start --profile handler races its interrupted-switch
+    -- recovery and can immediately restore the old active profile. When the
+    -- requested profile is already this game's last-active profile, --game
+    -- reaches the same target after startup recovery has completed.
     local process = windows.start_process(
         installation.executablePath,
-        {
-            "--game",
+        M.activation_arguments(
             game_id,
-            "--profile",
             profile_id,
-        }
+            profile_is_last_active
+        )
     )
     if process.started ~= true then
         return failure_result(

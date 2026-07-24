@@ -119,12 +119,14 @@ export async function warmVortexStateCache(): Promise<VortexCacheWarmResult> {
 export async function activateVortexProfile(
 	gameId: string,
 	profileId: string,
+	profileIsLastActive: boolean,
 ): Promise<VortexActivationResult> {
 	const response = await withTimeout(
 		requestActivation({
 			request_json: JSON.stringify({
 				vortex_game_id: gameId,
 				vortex_profile_id: profileId,
+				vortex_profile_is_last_active: profileIsLastActive,
 			}),
 		}),
 		310_000,

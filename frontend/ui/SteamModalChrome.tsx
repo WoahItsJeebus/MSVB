@@ -24,6 +24,7 @@ const STEAM_MODAL_CHROME_CSS = `
 		transform: none !important;
 	}
 
+	.VortexLaunchBridgeModal .DialogTwoColLayout > button.DialogButton,
 	.VortexLaunchBridgeModal .DialogThreeColLayout > button.DialogButton {
 		box-sizing: border-box !important;
 		display: flex !important;

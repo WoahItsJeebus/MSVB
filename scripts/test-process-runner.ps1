@@ -102,6 +102,48 @@ try {
 			throw 'The hidden process shell test failed.'
 		}
 
+		$detachRequestPath = Join-Path $testRoot 'detached-process.json'
+		$detachRequest = @{
+			operation = 'process'
+			executable = $powershell
+			arguments = @(
+				'-NoProfile',
+				'-NonInteractive',
+				'-Command',
+				'Start-Sleep -Seconds 4'
+			)
+			capture = $false
+			timeout_ms = 10000
+			maximum_output_bytes = 4096
+		}
+		[System.IO.File]::WriteAllText(
+			$detachRequestPath,
+			($detachRequest | ConvertTo-Json -Depth 8 -Compress),
+			(New-Object System.Text.UTF8Encoding($false))
+		)
+		$detachRunnerCommand =
+			'"' + $powershell + '"' +
+			' -WindowStyle Hidden -NoLogo -NoProfile -NonInteractive' +
+			' -ExecutionPolicy Bypass -File "' + $runner + '"' +
+			' -RequestPath "' + $detachRequestPath + '"'
+		$detachStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
+		$detachJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				$detachRunnerCommand `
+				'started' `
+				'emit'
+		) -join "`n"
+		$detachStartedAt.Stop()
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The detached process-shell test failed.'
+		}
+		$detachResult = $detachJson | ConvertFrom-Json
+		if (-not $detachResult.started -or
+			$detachStartedAt.ElapsedMilliseconds -ge 2000) {
+			throw 'A detached child retained the process bridge output handles.'
+		}
+
 		$desktopProbe = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\desktop_probe.ps1'
 		$desktopRequestPath = Join-Path $testRoot 'desktop-probe.json'
 		$desktopRequest = @{

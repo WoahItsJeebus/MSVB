@@ -42,7 +42,7 @@ Vortex 2.3.0 only applies profile-selection arguments reliably during a cold sta
 
 ### Process execution
 
-Custom arguments are parsed without a command shell. The Lua backend delegates execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics. Captured Vortex process trees additionally run on a private hidden Windows desktop, while interactive Vortex launches remain on the normal desktop.
+Custom arguments are parsed without a command shell. The Lua backend delegates execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics. Captured Vortex process trees additionally run on a private hidden Windows desktop. Detached interactive targets receive independent standard handles so they cannot retain the bridge's capture pipes; Vortex profile activation stays on the normal desktop but uses Vortex's supported minimized startup mode to keep its main window hidden.
 
 ### Data handling
 

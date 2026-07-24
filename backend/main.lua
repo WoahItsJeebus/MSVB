@@ -313,15 +313,19 @@ function activate_vortex_profile(request_json)
     local request = decode_request(request_json)
     local vortex_game_id = request and request.vortex_game_id
     local vortex_profile_id = request and request.vortex_profile_id
+    local vortex_profile_is_last_active =
+        request and request.vortex_profile_is_last_active == true
     log.info("vortex.activation.started", {
         gameIdRedacted = type(vortex_game_id) == "string",
         profileIdRedacted = type(vortex_profile_id) == "string",
+        profileWasLastActive = vortex_profile_is_last_active,
     })
 
     local activation_ok, activation = pcall(
         vortex_launcher.activate,
         vortex_game_id,
-        vortex_profile_id
+        vortex_profile_id,
+        vortex_profile_is_last_active
     )
     if not activation_ok then
         log.error("vortex.activation.failed", {

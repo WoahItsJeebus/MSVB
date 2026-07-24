@@ -4,6 +4,19 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepted opaque Vortex profile IDs that begin with a hyphen, allowing valid
+  generated profiles to reach Vortex activation.
+- Applied the compact action-button height to two-button recovery dialogs as
+  well as the initial three-button launch prompt.
+- Prevented detached Vortex processes from inheriting the bridge's captured
+  output handles, allowing activation RPCs to return while Vortex remains open.
+- Activated a game's last-used profile through Vortex's reliable game-selection
+  startup path, avoiding its cold-start profile/recovery race.
+- Started Vortex with its supported minimized flag so profile activation and
+  deployment can run without leaving its main window visible.
+
 ## [0.7.15] - 2026-07-23
 
 ### Fixed

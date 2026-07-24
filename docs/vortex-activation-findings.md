@@ -8,15 +8,29 @@ It does not begin Phase 6. Interception remains limited to the confirmed Library
 
 Vortex's current CLI declares `--game <game id>` and `--profile <profile id>`; the profile option is described as starting Vortex with a specific profile active. See the official [CLI implementation](https://github.com/Nexus-Mods/Vortex/blob/master/src/main/src/cli.ts) and [command-line parameter guide](https://github.com/Nexus-Mods/Vortex/wiki/MODDINGWIKI-Users-Troubleshooting-Command-Line-Parameters).
 
-The bridge constructs only this command:
+For the profile Vortex reports as last-active for a game, the bridge constructs:
 
 ```text
-Vortex.exe --game <matched-game-id> --profile <selected-profile-id>
+Vortex.exe --game <matched-game-id> --start-minimized
 ```
 
-Both identifiers are validated as bounded, non-empty, non-option, control-character-free strings and passed separately to `CreateProcessW`. The shell is never involved. The executable path comes only from the existing validated Vortex detector.
+Vortex 2.3.0 resolves `--game` to that game's own last-active profile after
+startup recovery finishes. This avoids a Vortex cold-start race in which
+`--profile` first schedules the requested switch and then the interrupted-switch
+recovery logic immediately restores the previously active profile. For any
+other selected profile, the bridge retains the explicit form:
+
+```text
+Vortex.exe --game <matched-game-id> --profile <selected-profile-id> --start-minimized
+```
+
+Both identifiers are validated as bounded, non-empty, control-character-free strings and passed as process arguments without a command shell. Vortex profile IDs are opaque generated values and may begin with a hyphen; Commander consumes such an ID as the required value following `--profile`, so it cannot become a separate option. The executable path comes only from the existing validated Vortex detector.
 
 The installed Vortex 2.3.0 renderer consumes a cold-start `--profile` by selecting the profile. Its profile-switch chain refreshes profile files, deploys the prior profile, deploys the selected profile, then logs `switched to profile` with the selected game/profile IDs before confirming the active profile. The same sequence is present in Vortex's profile-management source at [`profile_management/index.ts`](https://github.com/Nexus-Mods/Vortex/blob/master/src/renderer/src/extensions/profile_management/index.ts).
+
+`--start-minimized` is Vortex's supported background-start option. Vortex
+skips its splash screen and hides its BrowserWindow after initialization while
+profile synchronization and deployment continue in the renderer.
 
 ## Readiness contract
 
@@ -95,7 +109,7 @@ The launcher test rejects wrong game/profile IDs and non-completion log lines. T
 Use a short, harmless installed game and collect `[VLB]` records.
 
 1. Close Vortex and launch a matching game with one profile from Library Details.
-2. Select **Launch with Vortex**. Confirm Vortex starts and the progress dialog remains visible during deployment.
+2. Select **Launch with Vortex**. Confirm Vortex starts without leaving its main window visible and the progress dialog remains visible during deployment.
 3. Confirm `vortex.activation.confirmed` occurs only after Vortex reports the selected profile active, followed by one `launch.post_activation_steam_target_started` and one bypass consumption.
 4. Repeat with several profiles and confirm the selected profile—not merely the last-active profile—becomes active.
 5. Dismiss the profile picker and confirm Steam does not start.
