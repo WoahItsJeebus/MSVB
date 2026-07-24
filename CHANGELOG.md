@@ -6,6 +6,8 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 
 ### Fixed
 
+- Aligned the widened Vortex detection action with Clear Override by offsetting
+  its full 32-pixel horizontal-padding expansion.
 - Added consistent horizontal padding to the Vortex detection and read-only
   probe buttons in the settings panel.
 - Accepted opaque Vortex profile IDs that begin with a hyphen, allowing valid

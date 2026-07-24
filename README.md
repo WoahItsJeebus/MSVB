@@ -38,14 +38,14 @@ Once the plugin is listed in the Steam Homebrew plugin catalog:
 
 1. Open **Steam > Millennium Settings > Plugins**.
 2. Choose **Install a plugin**.
-3. Enter the plugin ID `vortex-launch-bridge` and install it.
+3. Enter the plugin ID `<Eventual_Steambrew_ID_Here>` and install it.
 4. Restart Steam when prompted.
 
 ### Development installation
 
 Use this method for an unreleased build or local development.
 
-1. Install [Node.js 20](https://nodejs.org/) and pnpm 10:
+1. Install [Node.js 20](https://nodejs.org/) and [pnpm 10](https://pnpm.io/installation):
 
    ```powershell
    npm install --global pnpm@10.34.5

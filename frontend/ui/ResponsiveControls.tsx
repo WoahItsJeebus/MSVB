@@ -34,6 +34,12 @@ export const paddedActionButtonStyle: CSSProperties = {
 	whiteSpace: 'nowrap',
 };
 
+export const insetPaddedActionButtonStyle: CSSProperties = {
+	...paddedActionButtonStyle,
+	position: 'relative',
+	right: '32px',
+};
+
 interface ResponsiveControlsProps {
 	children: ReactNode;
 }

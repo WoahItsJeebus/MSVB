@@ -113,8 +113,11 @@ try {
 	if ($responsiveControlsSource -notmatch 'paddedActionButtonStyle' -or
 		$responsiveControlsSource -notmatch "paddingLeft:\s*'16px'" -or
 		$responsiveControlsSource -notmatch "paddingRight:\s*'16px'" -or
-		([regex]::Matches($vortexProbePanelSource, 'style=\{paddedActionButtonStyle\}')).Count -ne 2) {
-		throw 'Vortex detection and read-only probe buttons must retain comfortable horizontal padding.'
+		$responsiveControlsSource -notmatch "position:\s*'relative'" -or
+		$responsiveControlsSource -notmatch "right:\s*'32px'" -or
+		([regex]::Matches($vortexProbePanelSource, 'style=\{paddedActionButtonStyle\}')).Count -ne 1 -or
+		([regex]::Matches($vortexProbePanelSource, 'style=\{insetPaddedActionButtonStyle\}')).Count -ne 1) {
+		throw 'Vortex actions must retain comfortable padding without overflowing their field containers.'
 	}
 
 	$rpcHandlers = @(

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { log } from '../logging/Logger';
 import {
 	fullWidthControlStyle,
+	insetPaddedActionButtonStyle,
 	paddedActionButtonStyle,
 	ResponsiveActionRow,
 	ResponsiveControlGroup,
@@ -146,7 +147,7 @@ export function VortexProbePanel() {
 				<DialogButton
 					disabled={busy !== undefined}
 					onClick={() => void detect()}
-					style={paddedActionButtonStyle}
+					style={insetPaddedActionButtonStyle}
 				>
 					{busy === 'detect' ? 'Detecting...' : 'Detect Vortex'}
 				</DialogButton>
