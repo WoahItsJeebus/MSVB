@@ -20,8 +20,35 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
   startup path, avoiding its cold-start profile/recovery race.
 - Started Vortex with its supported minimized flag so profile activation and
   deployment can run without leaving its main window visible.
+- Recognized Vortex's already-active profile completion record so last-used
+  profiles no longer wait for a switch event that Vortex does not emit.
+- Kept activation waits below Millennium's 30-second child-RPC deadline so a
+  real Vortex timeout reaches the recovery dialog instead of appearing as an
+  unavailable backend.
+- Explicitly launched detached Vortex targets with hidden window state,
+  preventing console-subsystem launchers from briefly flashing a terminal.
+- Replaced the broker's normal PowerShell start with native
+  `CREATE_NO_WINDOW` process creation, preventing Windows from allocating a
+  transient `conhost.exe` during activation polling.
+- Removed PowerShell from detached Vortex startup entirely; the Windows
+  subsystem broker now creates the interactive target directly with hidden,
+  `DETACHED_PROCESS` Win32 startup flags so Windows cannot provision a console
+  host for it.
+- Moved activation-time Vortex process checks into that broker as well, removing
+  the last repeated PowerShell/conhost process path from profile launches.
+- Classified an already-running Vortex cache refresh as an informational safety
+  skip when a prior cache is available, instead of emitting misleading backend
+  and frontend failure warnings.
+- Added a guarded Vortex 2.3.0 renderer compatibility repair that supplies
+  Node's missing `windowsHide` option for `dotnetprobe.exe`, updates the ASAR
+  integrity hashes without changing its layout, and preserves the signed probe.
+- Restored the system command processor in broker children, preventing Vortex
+  and its extensions from inheriting the bridge's temporary `ComSpec` override.
+- Reused an already-running Vortex instance when its latest bounded log state
+  exactly confirms the requested game and last-active profile, avoiding a
+  timeout caused by Vortex 2.3.0 ignoring redundant second-instance arguments.
 
-## [1.0.2] - 2026-07-24
+## [1.0.4] - 2026-07-25
 
 ### Fixed
 
@@ -58,7 +85,7 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Continuing through Steam does not undeploy Vortex-managed files and therefore does not guarantee an unmodded launch.
 - Only verified direct Steam launch sources are intercepted; unsupported and ambiguous routes pass through unchanged.
 
-[Unreleased]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.2...HEAD
-[1.0.2]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v1.0.2
+[Unreleased]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v1.0.4
 [0.7.14]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.13...v0.7.14
 [0.7.13]: https://github.com/WoahItsJeebus/MSVB/releases/tag/v0.7.13

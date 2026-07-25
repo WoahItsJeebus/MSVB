@@ -99,7 +99,8 @@ The plugin panel exposes:
 - Always ask;
 - remember choices per game;
 - diagnostic launch logging;
-- Vortex activation timeout from 1 to 300 seconds;
+- Vortex activation timeout from 1 to 25 seconds, leaving response headroom
+  inside Millennium's 30-second synchronous backend RPC deadline;
 - clear remembered choices;
 - per-AppID preferred Vortex profile ID;
 - Steam versus custom post-activation target;

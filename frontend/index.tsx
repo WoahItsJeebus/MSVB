@@ -18,7 +18,7 @@ import { VortexProbePanel } from './vortex/VortexProbePanel';
 import { warmVortexStateCache } from './vortex/VortexClient';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '1.0.2';
+const PLUGIN_VERSION = '1.0.4';
 const VORTEX_CACHE_REFRESH_INTERVAL_MS = 5 * 60 * 1_000;
 
 let activeLoadId = 0;
@@ -99,6 +99,15 @@ export default definePlugin(() => {
 			if (result.ok) {
 				log.info('vortex.cache.refresh_completed', {
 					trigger,
+					durationMs: result.durationMs,
+					profileCount: result.profileCount,
+					discoveredGameCount: result.discoveredGameCount,
+				});
+			} else if (result.skipped && result.cacheAvailable) {
+				log.info('vortex.cache.refresh_skipped', {
+					trigger,
+					reason: result.skipReason,
+					cacheAvailable: true,
 					durationMs: result.durationMs,
 					profileCount: result.profileCount,
 					discoveredGameCount: result.discoveredGameCount,

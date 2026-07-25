@@ -1,6 +1,21 @@
+param(
+	[string]$RunnerPath
+)
+
 $ErrorActionPreference = 'Stop'
 
-$runner = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend\util\process_runner.ps1'
+$repositoryRunner =
+	Join-Path (Split-Path -Parent $PSScriptRoot) 'backend\util\process_runner.ps1'
+$runner =
+	if ([string]::IsNullOrWhiteSpace($RunnerPath)) {
+		$repositoryRunner
+	}
+	else {
+		[System.IO.Path]::GetFullPath($RunnerPath)
+	}
+if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) {
+	throw 'The selected process runner is missing.'
+}
 $testRoot = Join-Path $env:TEMP ('vlb-process-runner-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
@@ -24,7 +39,7 @@ function Invoke-Runner {
 
 try {
 	$powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
-	$processShell = Join-Path (Split-Path -Parent $runner) 'process_shell.exe'
+	$processShell = Join-Path (Split-Path -Parent $repositoryRunner) 'process_shell.exe'
 	if (-not (Test-Path -LiteralPath $processShell -PathType Leaf)) {
 		throw 'The hidden process shell is missing.'
 	}
@@ -58,6 +73,21 @@ try {
 	}
 	if (-not $timeout.started -or -not $timeout.timedOut) {
 		throw 'Process timeout enforcement failed.'
+	}
+
+	$detached = Invoke-Runner @{
+		operation = 'process'
+		executable = $powershell
+		arguments = @('-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 4')
+		capture = $false
+		timeout_ms = 10000
+		maximum_output_bytes = 4096
+	}
+	$detachedProcess = Get-Process -Id $detached.processId -ErrorAction SilentlyContinue
+	if (-not $detached.started -or
+		$null -eq $detachedProcess -or
+		$detachedProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+		throw 'A detached console process was not launched fully hidden.'
 	}
 
 	$running = Invoke-Runner @{
@@ -124,7 +154,7 @@ try {
 		$detachRunnerCommand =
 			'"' + $powershell + '"' +
 			' -WindowStyle Hidden -NoLogo -NoProfile -NonInteractive' +
-			' -ExecutionPolicy Bypass -File "' + $runner + '"' +
+			' -ExecutionPolicy Bypass -File "' + $repositoryRunner + '"' +
 			' -RequestPath "' + $detachRequestPath + '"'
 		$detachStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
 		$detachJson = (
@@ -142,6 +172,74 @@ try {
 		if (-not $detachResult.started -or
 			$detachStartedAt.ElapsedMilliseconds -ge 2000) {
 			throw 'A detached child retained the process bridge output handles.'
+		}
+		$brokeredDetachedProcess =
+			Get-Process -Id $detachResult.processId -ErrorAction SilentlyContinue
+		if ($null -eq $brokeredDetachedProcess -or
+			$brokeredDetachedProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+			throw 'A detached console process was not launched fully hidden.'
+		}
+
+		$nativeDetachCommand =
+			'--vlb-detach "' + $powershell + '"' +
+			' -NoProfile -NonInteractive -Command Start-Sleep -Seconds 4'
+		$nativeDetachStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
+		$nativeDetachJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				$nativeDetachCommand `
+				'started' `
+				'emit'
+		) -join "`n"
+		$nativeDetachStartedAt.Stop()
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The native detached process-shell test failed.'
+		}
+		$nativeDetachResult = $nativeDetachJson | ConvertFrom-Json
+		$nativeDetachedProcess =
+			Get-Process -Id $nativeDetachResult.processId -ErrorAction SilentlyContinue
+		if (-not $nativeDetachResult.started -or
+			$nativeDetachStartedAt.ElapsedMilliseconds -ge 2000 -or
+			$null -eq $nativeDetachedProcess -or
+			$nativeDetachedProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+			throw 'The native detached launcher did not start fully hidden.'
+		}
+
+		$hiddenConsoleCommand =
+			'--vlb-detach-hidden-console "' + $powershell + '"' +
+			' -NoProfile -NonInteractive -Command Start-Sleep -Seconds 4'
+		$hiddenConsoleJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				$hiddenConsoleCommand `
+				'started' `
+				'emit'
+		) -join "`n"
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The hidden-console process-shell test failed.'
+		}
+		$hiddenConsoleResult = $hiddenConsoleJson | ConvertFrom-Json
+		$hiddenConsoleProcess =
+			Get-Process -Id $hiddenConsoleResult.processId -ErrorAction SilentlyContinue
+		if (-not $hiddenConsoleResult.started -or
+			$null -eq $hiddenConsoleProcess -or
+			$hiddenConsoleProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+			throw 'The native hidden-console launcher exposed a window.'
+		}
+
+		$nativeProcessStateJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				'--vlb-is-running powershell.exe' `
+				'running' `
+				'emit'
+		) -join "`n"
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The native process-state test failed.'
+		}
+		$nativeProcessState = $nativeProcessStateJson | ConvertFrom-Json
+		if (-not $nativeProcessState.ok -or -not $nativeProcessState.running) {
+			throw 'The native process-state query returned the wrong result.'
 		}
 
 		$desktopProbe = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\desktop_probe.ps1'
@@ -169,7 +267,7 @@ try {
 		$runnerCommand =
 			'"' + $powershell + '"' +
 			' -WindowStyle Hidden -NoLogo -NoProfile -NonInteractive' +
-			' -ExecutionPolicy Bypass -File "' + $runner + '"' +
+			' -ExecutionPolicy Bypass -File "' + $repositoryRunner + '"' +
 			' -RequestPath "' + $desktopRequestPath + '"'
 		$desktopJson = (
 			& lua `

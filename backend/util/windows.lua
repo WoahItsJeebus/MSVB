@@ -459,6 +459,73 @@ local function process_bridge_request(request)
     return response
 end
 
+local function direct_process_shell_request(command_parts, purpose)
+    local backend_directory =
+        rawget(_G, "MILLENNIUM_PLUGIN_SECRET_BACKEND_ABSOLUTE")
+    if type(backend_directory) ~= "string" or backend_directory == "" then
+        return nil, "The direct process shell environment is unavailable"
+    end
+
+    local process_shell_path = fs.join(
+        fs.join(backend_directory, "util"),
+        "process_shell.exe"
+    )
+    if not fs.is_file(process_shell_path) then
+        return nil, "The packaged direct process shell is unavailable"
+    end
+
+    local original_command_processor = utils.getenv("ComSpec")
+    local shell_set_ok, shell_set = pcall(
+        utils.setenv,
+        "ComSpec",
+        process_shell_path
+    )
+    if not shell_set_ok or shell_set ~= true then
+        return nil, "The direct process shell could not be selected"
+    end
+
+    local pipe, pipe_error = io.popen(table.concat(command_parts, " "), "r")
+    if type(original_command_processor) == "string" and
+        original_command_processor ~= "" then
+        pcall(utils.setenv, "ComSpec", original_command_processor)
+    end
+    if pipe == nil then
+        return nil, tostring(pipe_error or
+            "The direct process shell could not be started")
+    end
+
+    local output = pipe:read("*a")
+    pipe:close()
+    local decoded_ok, response = pcall(json_decode.decode, output)
+    if not decoded_ok or type(response) ~= "table" then
+        return nil, "The " .. purpose .. " returned an invalid response"
+    end
+    return response
+end
+
+local function detached_process_request(executable, arguments, create_hidden_console)
+    local command_parts = {
+        create_hidden_console == true and
+            "--vlb-detach-hidden-console" or "--vlb-detach",
+        quote_windows_argument(executable),
+    }
+    for _, argument in ipairs(arguments) do
+        command_parts[#command_parts + 1] =
+            quote_windows_argument(argument)
+    end
+    return direct_process_shell_request(
+        command_parts,
+        "detached process launcher"
+    )
+end
+
+local function direct_is_running_request(executable_name)
+    return direct_process_shell_request({
+        "--vlb-is-running",
+        quote_windows_argument(executable_name),
+    }, "process-state query")
+end
+
 local function create_pipe(parent_end)
     local security = ffi.new("VLB_SECURITY_ATTRIBUTES")
     security.nLength = ffi.sizeof(security)
@@ -723,7 +790,11 @@ function M.run_process(executable, arguments, options)
     }
 end
 
-function M.start_process(executable, arguments)
+local function start_process_direct(
+    executable,
+    arguments,
+    create_hidden_console
+)
     arguments = arguments or {}
 
     if type(executable) ~= "string" or executable == "" then
@@ -1110,14 +1181,12 @@ function M.start_process(executable, arguments)
         end
     end
 
-    local response, bridge_error = process_bridge_request({
-        operation = "process",
-        executable = executable,
-        arguments = arguments,
-        capture = false,
-        timeout_ms = 10000,
-        maximum_output_bytes = 4096,
-    })
+    local response, bridge_error =
+        detached_process_request(
+            executable,
+            arguments,
+            create_hidden_console
+        )
     if response == nil then
         return {
             started = false,
@@ -1125,6 +1194,14 @@ function M.start_process(executable, arguments)
         }
     end
     return response
+end
+
+function M.start_process(executable, arguments)
+    return start_process_direct(executable, arguments, false)
+end
+
+function M.start_process_with_hidden_console(executable, arguments)
+    return start_process_direct(executable, arguments, true)
 end
 
 function M.monotonic_milliseconds()
@@ -1147,10 +1224,7 @@ function M.is_process_running(executable_name)
         return false
     end
 
-    local response = process_bridge_request({
-        operation = "is_running",
-        executable_name = executable_name,
-    })
+    local response = direct_is_running_request(executable_name)
     return response ~= nil and response.ok == true and
         response.running == true
 end

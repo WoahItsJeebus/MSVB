@@ -36,7 +36,7 @@ end
 package.preload["settings.settings"] = function()
     return {
         get = function()
-            return { vortexActivationTimeoutMs = 30000 }
+            return { vortexActivationTimeoutMs = 25000 }
         end,
     }
 end
@@ -63,6 +63,56 @@ assert(not launcher.is_activation_signal(
 ))
 assert(launcher.is_activation_signal(
     'switched to profile {"gameId": "game-a", "current": "profile-a"}',
+    "game-a",
+    "profile-a"
+))
+local already_active_line =
+    'wait for profile switch to complete ' ..
+    '{"nextProfileId":"profile-a","activeProfileId":"profile-a"}'
+assert(launcher.is_activation_signal(
+    already_active_line,
+    "game-a",
+    "profile-a",
+    true
+))
+assert(not launcher.is_activation_signal(
+    already_active_line,
+    "game-a",
+    "profile-a",
+    false
+))
+assert(not launcher.is_activation_signal(
+    'wait for profile switch to complete ' ..
+        '{"nextProfileId":"profile-b","activeProfileId":"profile-a"}',
+    "game-a",
+    "profile-a",
+    true
+))
+
+local running_profile_log = table.concat({
+    'Vortex Version "2.3.0"',
+    'activating game {"gameId":"game-a"}',
+    'using last active profile {"profileId":"profile-a"}',
+    'wait for profile switch to complete ' ..
+        '{"nextProfileId":"profile-a","activeProfileId":"profile-a"}',
+}, "\n")
+assert(launcher.log_confirms_running_profile(
+    running_profile_log,
+    "game-a",
+    "profile-a"
+))
+assert(not launcher.log_confirms_running_profile(
+    running_profile_log,
+    "game-b",
+    "profile-a"
+))
+assert(not launcher.log_confirms_running_profile(
+    running_profile_log .. '\nactivating game {"gameId":"game-b"}',
+    "game-a",
+    "profile-a"
+))
+assert(not launcher.log_confirms_running_profile(
+    running_profile_log .. '\nVortex Version "2.3.0"',
     "game-a",
     "profile-a"
 ))

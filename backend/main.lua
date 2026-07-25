@@ -18,7 +18,7 @@ local json_decode = require("util.json_decode")
 local json_encode = require("util.json_encode")
 local windows = require("util.windows")
 
-local PLUGIN_VERSION = "1.0.2"
+local PLUGIN_VERSION = "1.0.4"
 local backend_started_at = os.time()
 local MAXIMUM_RPC_REQUEST_BYTES = 128 * 1024
 local vortex_state_cache = vortex_state_cache_module.new(
@@ -125,6 +125,8 @@ function warm_vortex_state_cache()
     local result = vortex_state_cache.refresh()
     local fields = {
         refreshed = result.refreshed == true,
+        skipped = result.skipped == true,
+        skipReason = result.skipReason,
         cacheAvailable = result.cacheAvailable == true,
         durationMs = result.durationMs,
         profileCount = result.profileCount,
@@ -133,6 +135,8 @@ function warm_vortex_state_cache()
     }
     if result.ok then
         log.info("vortex.cache.warm_completed", fields)
+    elseif result.skipped == true and result.cacheAvailable == true then
+        log.info("vortex.cache.warm_skipped", fields)
     else
         log.warn("vortex.cache.warm_failed", fields)
     end

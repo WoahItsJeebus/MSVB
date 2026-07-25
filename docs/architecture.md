@@ -42,7 +42,16 @@ Vortex 2.3.0 only applies profile-selection arguments reliably during a cold sta
 
 ### Process execution
 
-Custom arguments are parsed without a command shell. The Lua backend delegates execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics. Captured Vortex process trees additionally run on a private hidden Windows desktop. Detached interactive targets receive independent standard handles so they cannot retain the bridge's capture pipes; Vortex profile activation stays on the normal desktop but uses Vortex's supported minimized startup mode to keep its main window hidden.
+Custom arguments are parsed without a command shell. The Lua backend delegates captured execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics, and captured Vortex process trees additionally run on a private hidden Windows desktop. Detached interactive targets and activation-time process-state checks bypass PowerShell: the Windows-subsystem helper queries process state itself and creates custom targets directly on the user's desktop with hidden `DETACHED_PROCESS` Win32 flags. Broker children also receive the real system command processor rather than the bridge's temporary `ComSpec` override. Detached targets cannot retain the bridge's capture pipes, and Vortex's supported minimized startup mode keeps its main window hidden.
+
+Vortex 2.3.0 separately starts its Console-subsystem `dotnetprobe.exe` through
+Node `execFile` without `windowsHide`. The explicitly invoked
+`scripts/patch-vortex-dotnetprobe.ps1` compatibility repair validates and backs
+up Vortex's complete `app.asar`, adds `{windowsHide:true}` to that exact renderer
+call with a same-size replacement, and updates the renderer's ASAR integrity
+hashes. The signed probe remains unchanged and Windows no longer allocates its
+visible console host. This external Vortex repair is never applied implicitly
+and may need to be repeated after a Vortex update.
 
 ### Data handling
 

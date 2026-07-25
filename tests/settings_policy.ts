@@ -17,7 +17,7 @@ const pluginSettings = parsePluginSettings({
 	settings: {
 		alwaysAsk: false,
 		rememberChoicePerGame: true,
-		vortexActivationTimeoutMs: 45_000,
+		vortexActivationTimeoutMs: 20_000,
 		diagnosticLogging: true,
 	},
 });

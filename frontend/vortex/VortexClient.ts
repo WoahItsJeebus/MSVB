@@ -22,6 +22,8 @@ const requestActivation = callable<[{ request_json: string }], string>(
 export interface VortexCacheWarmResult {
 	ok: boolean;
 	refreshed: boolean;
+	skipped: boolean;
+	skipReason?: string;
 	cacheAvailable: boolean;
 	durationMs: number;
 	profileCount: number;
@@ -64,6 +66,8 @@ function parseCacheWarmResult(value: unknown): VortexCacheWarmResult {
 	if (
 		typeof result.ok !== 'boolean' ||
 		typeof result.refreshed !== 'boolean' ||
+		typeof result.skipped !== 'boolean' ||
+		(result.skipReason !== undefined && typeof result.skipReason !== 'string') ||
 		typeof result.cacheAvailable !== 'boolean' ||
 		typeof result.durationMs !== 'number' ||
 		!Number.isFinite(result.durationMs) ||
@@ -78,6 +82,8 @@ function parseCacheWarmResult(value: unknown): VortexCacheWarmResult {
 	return {
 		ok: result.ok,
 		refreshed: result.refreshed,
+		skipped: result.skipped,
+		skipReason: result.skipReason as string | undefined,
 		cacheAvailable: result.cacheAvailable,
 		durationMs: result.durationMs,
 		profileCount: result.profileCount,

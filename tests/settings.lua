@@ -68,17 +68,17 @@ local settings = require("settings.settings")
 local defaults = settings.get_public_settings()
 assert(defaults.alwaysAsk == true)
 assert(defaults.rememberChoicePerGame == false)
-assert(defaults.vortexActivationTimeoutMs == 30000)
+assert(defaults.vortexActivationTimeoutMs == 25000)
 assert(defaults.diagnosticLogging == false)
 
 assert(settings.remember_launch_choice(1234, "steam", ""))
 assert(settings.get_game_launch_settings(1234).rememberedChoice == nil)
 
-assert(settings.update_general(false, true, 45000, true))
+assert(settings.update_general(false, true, 20000, true))
 local updated = settings.get_public_settings()
 assert(updated.alwaysAsk == false)
 assert(updated.rememberChoicePerGame == true)
-assert(updated.vortexActivationTimeoutMs == 45000)
+assert(updated.vortexActivationTimeoutMs == 20000)
 assert(updated.diagnosticLogging == true)
 
 assert(settings.set_game_launch_settings(
@@ -117,7 +117,7 @@ assert(save_error == "simulated write failure")
 updated = settings.get_public_settings()
 assert(updated.alwaysAsk == false)
 assert(updated.rememberChoicePerGame == true)
-assert(updated.vortexActivationTimeoutMs == 45000)
+assert(updated.vortexActivationTimeoutMs == 20000)
 assert(updated.diagnosticLogging == true)
 
 io.open = original_open

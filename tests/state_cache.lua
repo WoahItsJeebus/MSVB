@@ -5,9 +5,22 @@ local state_cache = require("vortex.state_cache")
 local now = 1000
 local load_count = 0
 local should_fail = false
+local should_skip = false
 local function loader()
     load_count = load_count + 1
     now = now + 25
+    if should_skip then
+        return {
+            ok = false,
+            warnings = {
+                "The read-only state query was skipped because Vortex is already running.",
+            },
+            stateCommand = {
+                executed = false,
+                skipReason = "vortex-already-running",
+            },
+        }
+    end
     if should_fail then
         return {
             ok = false,
@@ -73,6 +86,16 @@ assert(failed_refresh.cacheAvailable == true)
 assert(failed_refresh.error == "temporary refresh failure")
 local retained = cache.get()
 assert(retained ~= nil)
+
+should_fail = false
+should_skip = true
+local skipped_refresh = cache.refresh()
+assert(skipped_refresh.ok == false)
+assert(skipped_refresh.refreshed == false)
+assert(skipped_refresh.skipped == true)
+assert(skipped_refresh.skipReason == "vortex-already-running")
+assert(skipped_refresh.cacheAvailable == true)
+assert(skipped_refresh.error == nil)
 
 assert(cache.mark_profile_active("game-a", "profile-b"))
 local updated = cache.get()

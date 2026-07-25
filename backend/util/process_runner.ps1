@@ -278,10 +278,13 @@ try {
 		# Start-Process gives an interactive target independent standard
 		# handles. Using ProcessStartInfo here would let the target inherit this
 		# runner's captured handles and keep the outer broker blocked until the
-		# target itself exited.
+		# target itself exited. Explicit hidden window state also prevents a
+		# console-subsystem launcher from briefly showing a terminal before its
+		# GUI or background process takes over.
 		$process = Start-Process `
 			-FilePath $executable `
 			-ArgumentList ($arguments -join ' ') `
+			-WindowStyle Hidden `
 			-PassThru
 		if ($null -eq $process) {
 			throw 'The process did not start.'

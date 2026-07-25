@@ -66,8 +66,8 @@ export function SettingsPanel() {
 			return;
 		}
 		const seconds = Number(timeoutSeconds);
-		if (!Number.isInteger(seconds) || seconds < 1 || seconds > 300) {
-			setGeneralStatus('Vortex activation timeout must be a whole number from 1 to 300 seconds.');
+		if (!Number.isInteger(seconds) || seconds < 1 || seconds > 25) {
+			setGeneralStatus('Vortex activation timeout must be a whole number from 1 to 25 seconds.');
 			return;
 		}
 
@@ -193,7 +193,7 @@ export function SettingsPanel() {
 			/>
 			<Field
 				label="Vortex activation timeout (seconds)"
-				description={generalStatus ?? 'Allowed range: 1 to 300 seconds.'}
+				description={generalStatus ?? 'Allowed range: 1 to 25 seconds.'}
 				childrenLayout="below"
 			>
 				<ResponsiveControlGroup>

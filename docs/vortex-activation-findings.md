@@ -32,6 +32,25 @@ The installed Vortex 2.3.0 renderer consumes a cold-start `--profile` by selecti
 skips its splash screen and hides its BrowserWindow after initialization while
 profile synchronization and deployment continue in the renderer.
 
+## Vortex 2.3.0 dotnet probe
+
+The installed renderer checks the `.NET` desktop runtime with
+`child_process.execFile(dotnetprobe.exe, args)` and omits the supported
+`windowsHide` option. Because the bundled probe is a Windows Console-subsystem
+executable, Windows allocates a briefly visible `conhost.exe` roughly four
+seconds into a cold Vortex startup. Hiding the parent Electron process cannot
+prevent that independent console allocation.
+
+The guarded `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair adds
+`{windowsHide:true}` to that exact renderer call. It creates and hash-checks a
+complete `app.asar` backup, uses a same-size JavaScript replacement so archive
+offsets remain unchanged, updates both renderer integrity hashes, and leaves the
+signed probe untouched. Windows may still create a short-lived console-host
+process for the signed Console-subsystem executable, but Node starts it hidden.
+A high-frequency cold activation trace must show no visible console window.
+Vortex updates can restore the official renderer, so the repair remains
+explicit and repeatable rather than modifying Vortex automatically.
+
 ## Readiness contract
 
 Process creation alone is not treated as successful activation.
@@ -41,17 +60,36 @@ Before starting Vortex, the backend records the current end of each supported Vo
 - `%APPDATA%\Vortex\vortex.log`
 - `%ProgramData%\Vortex\vortex.log` for Vortex multi-user mode
 
-It then reads only newly appended bytes. Success requires one complete `switched to profile` record containing exact JSON values for both the matched game ID and selected profile ID. That record occurs after both deployment steps in Vortex's profile-switch chain.
+It then reads only newly appended bytes. A changed profile succeeds only after one
+complete `switched to profile` record containing exact JSON values for both the
+matched game ID and selected profile ID. That record occurs after both deployment
+steps in Vortex's profile-switch chain.
+
+When `--game` resolves to the profile already active for that game, Vortex 2.3.0
+does not emit `switched to profile`. The bridge instead accepts its no-op
+`wait for profile switch to complete` record only when both `nextProfileId` and
+`activeProfileId` exactly equal the selected profile and the read-only state had
+already marked that profile last-active. This avoids waiting for an event Vortex
+cannot produce while retaining exact profile confirmation.
 
 Vortex's file logger writes `vortex.log`, rotates it at a bounded size, and includes renderer metadata in each record; see its official [`logging.ts`](https://github.com/Nexus-Mods/Vortex/blob/master/src/main/src/logging.ts).
 
 The bridge never returns or writes Vortex log contents. Normal plugin logs include only status flags, durations, AppIDs, the readiness-signal name, and redaction markers. No Vortex state file or database is opened or modified.
 
-The existing `vortexActivationTimeoutMs` setting supplies the bounded wait and defaults to 30 seconds. Phase 5 does not add a settings UI.
+The existing `vortexActivationTimeoutMs` setting supplies the bounded wait and
+defaults to 25 seconds. Millennium 3.3.1 expires synchronous child RPCs after
+30 seconds, so the settings range is capped at 25 seconds to leave time for the
+backend to return a structured timeout instead of surfacing a transport failure.
 
 ## Already-running Vortex limitation
 
 Vortex's current main-process `second-instance` handler parses forwarded arguments, but its non-download/install path only raises the main window. It does not forward `--game` or `--profile` into the renderer's cold-start command-line state. See the official [`Application.ts`](https://github.com/Nexus-Mods/Vortex/blob/master/src/main/src/Application.ts).
+
+The bridge avoids a redundant second-instance request when Vortex is already
+running and a bounded read of its latest log proves that both the matched game
+and selected last-active profile are current. A new Vortex session or a later
+game-activation record invalidates older confirmation. If current state cannot
+be proven exactly, the limitation below remains authoritative.
 
 The installed Vortex 2.3.0 bundle matches that source behavior. Consequently:
 

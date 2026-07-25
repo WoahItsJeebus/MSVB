@@ -91,7 +91,9 @@ export interface VortexActivationResult {
 	profileActivationConfirmed: boolean;
 	deploymentConfirmed: boolean;
 	readinessAvailable?: boolean;
-	readinessSignal: 'vortex-log-profile-switch';
+	readinessSignal:
+		| 'vortex-log-profile-switch'
+		| 'vortex-log-profile-already-active';
 	error?: string;
 	warning?: string;
 }
@@ -340,7 +342,10 @@ export function parseVortexActivationResult(value: unknown): VortexActivationRes
 	if (timeoutMs === undefined || timeoutMs < 1) {
 		throw new Error(`${label} has an invalid timeoutMs field.`);
 	}
-	if (record.readinessSignal !== 'vortex-log-profile-switch') {
+	if (
+		record.readinessSignal !== 'vortex-log-profile-switch' &&
+		record.readinessSignal !== 'vortex-log-profile-already-active'
+	) {
 		throw new Error(`${label} has an unknown readinessSignal field.`);
 	}
 
@@ -357,7 +362,7 @@ export function parseVortexActivationResult(value: unknown): VortexActivationRes
 		profileActivationConfirmed: record.profileActivationConfirmed as boolean,
 		deploymentConfirmed: record.deploymentConfirmed as boolean,
 		readinessAvailable: optionalBoolean(record, 'readinessAvailable', label),
-		readinessSignal: 'vortex-log-profile-switch',
+		readinessSignal: record.readinessSignal,
 		error: optionalString(record, 'error', label),
 		warning: optionalString(record, 'warning', label),
 	};

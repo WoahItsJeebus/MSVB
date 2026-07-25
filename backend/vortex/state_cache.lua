@@ -59,6 +59,16 @@ local function failure_message(result)
     return "Vortex state could not be refreshed."
 end
 
+local function skip_reason(result)
+    if type(result) ~= "table" or
+        type(result.stateCommand) ~= "table" or
+        type(result.stateCommand.skipReason) ~= "string" or
+        result.stateCommand.skipReason == "" then
+        return nil
+    end
+    return result.stateCommand.skipReason
+end
+
 function M.new(loader, clock)
     assert(type(loader) == "function", "state cache loader is required")
     assert(type(clock) == "function", "state cache clock is required")
@@ -95,8 +105,11 @@ function M.new(loader, clock)
         local duration_ms = math.max(0, math.floor(clock() - started_at))
         local refreshed = loaded_ok and cache.store(result)
         local available = cached_state ~= nil
+        local refresh_skip_reason =
+            loaded_ok and skip_reason(result) or nil
+        local skipped = refresh_skip_reason ~= nil
         local refresh_error
-        if not refreshed then
+        if not refreshed and not skipped then
             refresh_error = loaded_ok and failure_message(result) or
                 "Vortex state refresh failed unexpectedly."
         end
@@ -104,6 +117,8 @@ function M.new(loader, clock)
         return {
             ok = refreshed == true,
             refreshed = refreshed == true,
+            skipped = skipped,
+            skipReason = refresh_skip_reason,
             cacheAvailable = available,
             durationMs = duration_ms,
             profileCount = available and #cached_state.profiles or 0,

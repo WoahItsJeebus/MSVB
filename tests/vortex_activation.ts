@@ -23,6 +23,22 @@ const success = parseVortexActivationResult({
 assert(success.ok, 'A confirmed activation response should parse.');
 assert(success.deploymentConfirmed, 'Deployment confirmation must be retained.');
 
+const alreadyActive = parseVortexActivationResult({
+	ok: true,
+	started: true,
+	timedOut: false,
+	timeoutMs: 25_000,
+	profileActivationRequested: true,
+	profileActivationConfirmed: true,
+	deploymentConfirmed: true,
+	readinessAvailable: true,
+	readinessSignal: 'vortex-log-profile-already-active',
+});
+assert(
+	alreadyActive.readinessSignal === 'vortex-log-profile-already-active',
+	'An already-active profile readiness response should parse.',
+);
+
 const failure = parseVortexActivationResult({
 	ok: false,
 	started: true,

@@ -42,17 +42,69 @@ try {
 	if (-not (Test-Path -LiteralPath 'backend\util\process_runner.ps1')) {
 		throw 'The packaged process runner is missing.'
 	}
+	$processRunnerSource =
+		Get-Content -LiteralPath 'backend\util\process_runner.ps1' -Raw
+	if ($processRunnerSource -notmatch
+		'(?s)if\s*\(-not \$capture\).*?Start-Process.*?-WindowStyle\s+Hidden') {
+		throw 'Detached process launches must explicitly request hidden window state.'
+	}
 	if (-not (Test-Path -LiteralPath 'backend\util\process_shell.exe')) {
 		throw 'The hidden process shell is missing.'
 	}
 	$processShellSource = Get-Content -LiteralPath 'backend\util\process_shell.cs' -Raw
-	if ($processShellSource -notmatch 'CreateNoWindow\s*=\s*true' -or
-		$processShellSource -notmatch 'WindowStyle\s*=\s*ProcessWindowStyle\.Hidden' -or
+	if ($processShellSource -notmatch 'CreateNoWindow\s*=\s*0x08000000' -or
+		$processShellSource -notmatch 'DetachedProcess\s*=\s*0x00000008' -or
+		$processShellSource -notmatch 'RunWithoutConsole\(' -or
+		$processShellSource -notmatch 'RunDetached\(' -or
+		$processShellSource -notmatch '--vlb-detach' -or
+		$processShellSource -notmatch '--vlb-detach-hidden-console' -or
+		$processShellSource -notmatch 'NormalizeChildEnvironment\(' -or
+		$processShellSource -notmatch 'RunIsProcessRunning\(' -or
+		$processShellSource -notmatch '--vlb-is-running' -or
+		$processShellSource -notmatch
+			'createHiddenConsole\s*\?\s*CreateNewConsole\s*:\s*DetachedProcess' -or
+		$processShellSource -notmatch
+			'CreateNoWindow\s*\+\s*CreateUnicodeEnvironment' -or
 		$processShellSource -notmatch 'CreateDesktop\(' -or
 		$processShellSource -notmatch 'CreateProcess\(' -or
 		$processShellSource -notmatch 'desktop\s*=\s*desktopName' -or
 		-not $processShellSource.Contains('\"capture\":true')) {
 		throw 'Bridge runners must suppress consoles, and captured process trees must run on a hidden desktop.'
+	}
+	$windowsSource = Get-Content -LiteralPath 'backend\util\windows.lua' -Raw
+	if ($windowsSource -notmatch
+		'function\s+detached_process_request\(executable,\s*arguments,\s*create_hidden_console\)' -or
+		$windowsSource -notmatch
+		'detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console\s*\)' -or
+		$windowsSource -notmatch
+		'start_process_with_hidden_console\(executable,\s*arguments\)' -or
+		$windowsSource -notmatch
+		'direct_is_running_request\(executable_name\)') {
+		throw 'Detached targets and activation polling must bypass the PowerShell process runner.'
+	}
+	$vortexLauncherSource =
+		Get-Content -LiteralPath 'backend\vortex\launcher.lua' -Raw
+	if ($vortexLauncherSource -notmatch
+		'local\s+process\s*=\s*windows\.start_process\(') {
+		throw 'Vortex activation must use the direct detached launcher.'
+	}
+	if (-not (Test-Path -LiteralPath 'scripts\patch-vortex-dotnetprobe.ps1')) {
+		throw 'The guarded Vortex dotnet-probe compatibility repair is missing.'
+	}
+	$dotnetProbePatch =
+		Get-Content -LiteralPath 'scripts\patch-vortex-dotnetprobe.ps1' -Raw
+	if ($dotnetProbePatch -notmatch
+		'unsupported size pickle' -or
+		$dotnetProbePatch -notmatch
+		'Get-FileHash' -or
+		$dotnetProbePatch -notmatch
+		'Copy-Item' -or
+		-not $dotnetProbePatch.Contains(
+			'(file,args,{windowsHide:true})'
+		) -or
+		$dotnetProbePatch -notmatch
+		'patchedRendererHash') {
+		throw 'The Vortex dotnet-probe repair must validate, back up, and verify its same-size ASAR edit.'
 	}
 	if ($backendMain -notmatch 'function\s+verify_process_bridge\(\)') {
 		throw 'Backend startup must expose process bridge verification.'

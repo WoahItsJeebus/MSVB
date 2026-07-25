@@ -113,7 +113,7 @@ export function parsePluginSettings(value: unknown): PluginSettings {
 	const response = successfulPayload(value, 'Plugin settings response');
 	const settings = record(response.settings, 'Plugin settings');
 	const timeout = numberField(settings, 'vortexActivationTimeoutMs', 'Plugin settings');
-	if (!Number.isSafeInteger(timeout) || timeout < 1_000 || timeout > 300_000) {
+	if (!Number.isSafeInteger(timeout) || timeout < 1_000 || timeout > 25_000) {
 		throw new Error('Plugin settings has an invalid Vortex activation timeout.');
 	}
 	return {

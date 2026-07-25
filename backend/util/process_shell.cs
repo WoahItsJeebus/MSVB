@@ -11,7 +11,9 @@ internal static class ProcessShell
 {
     private const uint GenericAll = 0x10000000;
     private const uint CreateNewConsole = 0x00000010;
+    private const uint DetachedProcess = 0x00000008;
     private const uint CreateUnicodeEnvironment = 0x00000400;
+    private const uint CreateNoWindow = 0x08000000;
     private const uint Infinite = 0xFFFFFFFF;
     private const uint StartfUseShowWindow = 0x00000001;
     private const uint StartfUseStdHandles = 0x00000100;
@@ -128,10 +130,11 @@ internal static class ProcessShell
         return false;
     }
 
-    private static int RunOnHiddenDesktop(
+    private static int RunNative(
         string executable,
         IList<string> arguments,
-        string desktopName
+        string desktopName,
+        uint creationFlags
     )
     {
         using (var stdoutPipe = new AnonymousPipeServerStream(
@@ -176,7 +179,7 @@ internal static class ProcessShell
                 IntPtr.Zero,
                 IntPtr.Zero,
                 true,
-                CreateNewConsole + CreateUnicodeEnvironment,
+                creationFlags,
                 IntPtr.Zero,
                 null,
                 ref startup,
@@ -234,6 +237,167 @@ internal static class ProcessShell
         }
     }
 
+    private static int RunOnHiddenDesktop(
+        string executable,
+        IList<string> arguments,
+        string desktopName
+    )
+    {
+        return RunNative(
+            executable,
+            arguments,
+            desktopName,
+            CreateNewConsole + CreateUnicodeEnvironment
+        );
+    }
+
+    private static int RunWithoutConsole(
+        string executable,
+        IList<string> arguments
+    )
+    {
+        return RunNative(
+            executable,
+            arguments,
+            null,
+            CreateNoWindow + CreateUnicodeEnvironment
+        );
+    }
+
+    private static int RunDetached(
+        string executable,
+        IList<string> arguments,
+        bool createHiddenConsole
+    )
+    {
+        var commandLine = new StringBuilder();
+        commandLine.Append(QuoteArgument(executable));
+        foreach (var argument in arguments)
+        {
+            commandLine.Append(' ');
+            commandLine.Append(QuoteArgument(argument));
+        }
+
+        var startup = new StartupInfo
+        {
+            cb = Marshal.SizeOf(typeof(StartupInfo)),
+            desktop = @"winsta0\default",
+            flags = StartfUseShowWindow,
+            showWindow = SwHide,
+        };
+        ProcessInformation processInformation;
+        var stopwatch = Stopwatch.StartNew();
+        var created = CreateProcess(
+            executable,
+            commandLine,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            false,
+            (createHiddenConsole ? CreateNewConsole : DetachedProcess) +
+                CreateUnicodeEnvironment,
+            IntPtr.Zero,
+            null,
+            ref startup,
+            out processInformation
+        );
+        stopwatch.Stop();
+
+        if (!created)
+        {
+            var errorCode = Marshal.GetLastWin32Error();
+            WriteStandardOutput(
+                "{\"started\":false,\"errorCode\":" +
+                errorCode.ToString(CultureInfo.InvariantCulture) +
+                ",\"error\":\"CreateProcessW failed with Windows error " +
+                errorCode.ToString(CultureInfo.InvariantCulture) +
+                "\"}"
+            );
+            return 1;
+        }
+
+        try
+        {
+            WriteStandardOutput(
+                "{\"started\":true,\"processId\":" +
+                processInformation.processId.ToString(CultureInfo.InvariantCulture) +
+                ",\"durationMs\":" +
+                stopwatch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) +
+                "}"
+            );
+            return 0;
+        }
+        finally
+        {
+            CloseHandle(processInformation.thread);
+            CloseHandle(processInformation.process);
+        }
+    }
+
+    private static void NormalizeChildEnvironment()
+    {
+        var systemDirectory = Environment.GetFolderPath(
+            Environment.SpecialFolder.System
+        );
+        if (string.IsNullOrEmpty(systemDirectory))
+        {
+            return;
+        }
+
+        var commandProcessor = Path.Combine(systemDirectory, "cmd.exe");
+        if (File.Exists(commandProcessor))
+        {
+            // Lua temporarily selects this executable as ComSpec so io.popen
+            // reaches a Windows-subsystem broker. No child should inherit that
+            // infrastructure override as its own command processor.
+            Environment.SetEnvironmentVariable("ComSpec", commandProcessor);
+        }
+    }
+
+    private static void WriteStandardOutput(string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        using (var output = Console.OpenStandardOutput())
+        {
+            output.Write(bytes, 0, bytes.Length);
+            output.Flush();
+        }
+    }
+
+    private static int RunIsProcessRunning(string executableName)
+    {
+        if (!string.Equals(
+            Path.GetFileName(executableName),
+            executableName,
+            StringComparison.Ordinal
+        ) || !string.Equals(
+            Path.GetExtension(executableName),
+            ".exe",
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            return 87;
+        }
+
+        var processName = Path.GetFileNameWithoutExtension(executableName);
+        var processes = Process.GetProcessesByName(processName);
+        try
+        {
+            WriteStandardOutput(
+                "{\"ok\":true,\"running\":" +
+                (processes.Length > 0 ? "true" : "false") +
+                "}"
+            );
+            return 0;
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
     private static string QuoteArgument(string value)
     {
         if (value.Length == 0)
@@ -284,6 +448,7 @@ internal static class ProcessShell
             {
                 File.WriteAllLines(tracePath, args);
             }
+            NormalizeChildEnvironment();
 
             var commandIndex = -1;
             for (var index = 0; index < args.Length; index += 1)
@@ -298,6 +463,55 @@ internal static class ProcessShell
             if (commandIndex < 0 || commandIndex >= args.Length)
             {
                 return 87;
+            }
+
+            var detachWithoutConsole = string.Equals(
+                args[commandIndex],
+                "--vlb-detach",
+                StringComparison.OrdinalIgnoreCase
+            );
+            var detachWithHiddenConsole = string.Equals(
+                args[commandIndex],
+                "--vlb-detach-hidden-console",
+                StringComparison.OrdinalIgnoreCase
+            );
+            if (detachWithoutConsole || detachWithHiddenConsole)
+            {
+                if (commandIndex + 1 >= args.Length)
+                {
+                    return 87;
+                }
+
+                var detachedExecutable = args[commandIndex + 1];
+                if (!Path.IsPathRooted(detachedExecutable) ||
+                    !File.Exists(detachedExecutable))
+                {
+                    return 2;
+                }
+
+                var detachedArguments = new List<string>();
+                for (var index = commandIndex + 2; index < args.Length; index += 1)
+                {
+                    detachedArguments.Add(args[index]);
+                }
+                return RunDetached(
+                    detachedExecutable,
+                    detachedArguments,
+                    detachWithHiddenConsole
+                );
+            }
+
+            if (string.Equals(
+                args[commandIndex],
+                "--vlb-is-running",
+                StringComparison.OrdinalIgnoreCase
+            ))
+            {
+                if (commandIndex + 2 != args.Length)
+                {
+                    return 87;
+                }
+                return RunIsProcessRunning(args[commandIndex + 1]);
             }
 
             var executable = args[commandIndex];
@@ -340,51 +554,11 @@ internal static class ProcessShell
                 return RunOnHiddenDesktop(executable, arguments, desktopName);
             }
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = executable,
-                Arguments = string.Join(
-                    " ",
-                    arguments.ConvertAll(QuoteArgument)
-                ),
-                UseShellExecute = false,
-                // The broker is a Windows-subsystem executable, and its
-                // PowerShell runner is infrastructure rather than user-facing
-                // UI. CREATE_NO_WINDOW prevents registry and process-state
-                // requests from briefly allocating console windows on Steam's
-                // desktop. Captured Vortex calls take the private-desktop path
-                // above; interactive targets launched by the runner remain
-                // independently visible.
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = new UTF8Encoding(false, true),
-                StandardErrorEncoding = new UTF8Encoding(false, true),
-            };
-            using (var process = Process.Start(startInfo))
-            {
-                if (process == null)
-                {
-                    return 2;
-                }
-                var stdout = process.StandardOutput.ReadToEndAsync();
-                var stderr = process.StandardError.ReadToEndAsync();
-                process.WaitForExit();
-                var stdoutBytes = Encoding.UTF8.GetBytes(stdout.GetAwaiter().GetResult());
-                var stderrBytes = Encoding.UTF8.GetBytes(stderr.GetAwaiter().GetResult());
-                using (var output = Console.OpenStandardOutput())
-                {
-                    output.Write(stdoutBytes, 0, stdoutBytes.Length);
-                    output.Flush();
-                }
-                using (var error = Console.OpenStandardError())
-                {
-                    error.Write(stderrBytes, 0, stderrBytes.Length);
-                    error.Flush();
-                }
-                return process.ExitCode;
-            }
+            // Invoke the infrastructure runner with Win32 directly. The
+            // ProcessStartInfo convenience path can still allocate conhost.exe
+            // before its hidden window state takes effect. CREATE_NO_WINDOW
+            // prevents the console host from being created in the first place.
+            return RunWithoutConsole(executable, arguments);
         }
         catch
         {

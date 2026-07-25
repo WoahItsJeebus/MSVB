@@ -15,7 +15,9 @@ local DEFAULTS = {
     preferredLaunchTargets = {},
     customExecutables = {},
     customArguments = {},
-    vortexActivationTimeoutMs = 30000,
+    -- Millennium 3.3.1 expires synchronous child RPC calls after 30 seconds.
+    -- Keep enough response margin for the final process check and JSON encode.
+    vortexActivationTimeoutMs = 25000,
     vortexProbeTimeoutMs = 10000,
     diagnosticLogging = false,
     steamAppIdOverrides = {},
@@ -153,7 +155,7 @@ local function sanitize(decoded)
 
     settings.vortexActivationTimeoutMs = math.floor(math.max(
         1000,
-        math.min(settings.vortexActivationTimeoutMs, 300000)
+        math.min(settings.vortexActivationTimeoutMs, 25000)
     ))
     settings.vortexProbeTimeoutMs = math.floor(math.max(
         1000,
@@ -295,8 +297,8 @@ function M.update_general(
 
     local timeout = tonumber(activation_timeout_ms)
     if timeout == nil or timeout ~= math.floor(timeout) or
-        timeout < 1000 or timeout > 300000 then
-        return false, "Vortex activation timeout must be between 1000 and 300000 milliseconds"
+        timeout < 1000 or timeout > 25000 then
+        return false, "Vortex activation timeout must be between 1000 and 25000 milliseconds"
     end
 
     local previous = {

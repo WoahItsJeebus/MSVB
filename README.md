@@ -1,6 +1,6 @@
 # Vortex Launch Bridge
 
-[![Version](https://img.shields.io/badge/version-1.0.2-2ea3f2)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.4-2ea3f2)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
 [![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -118,8 +118,25 @@ Settings are stored locally at:
 ### Vortex activation times out
 
 - Fully exit Vortex, including its notification-area process, and try again.
-- Increase the activation timeout in the plugin settings if deployment normally takes longer.
+- Increase the activation timeout in the plugin settings, up to 25 seconds, if deployment normally takes longer.
 - Verify the selected profile still exists and deploys successfully from Vortex itself.
+
+### A terminal flashes while Vortex starts
+
+Vortex 2.3.0 starts its bundled console-subsystem `.NET` probe without Node's
+`windowsHide` option. With Vortex fully exited, run the guarded compatibility
+repair from an administrator PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\patch-vortex-dotnetprobe.ps1
+```
+
+The script validates Vortex's ASAR layout and renderer hash, creates a complete
+hash-verified archive backup under
+`%LOCALAPPDATA%\VortexLaunchBridge\Backups`, inserts the missing option without
+changing any file size, updates the renderer integrity hashes, and verifies the
+result. Vortex's signed probe remains untouched. A later Vortex update may
+restore the official renderer; rerun the repair only if the flash returns.
 
 ### Logs
 
@@ -149,6 +166,10 @@ The plugin does not:
 - inject into game processes;
 - remove deployed mods when continuing through Steam;
 - send telemetry or settings over the network.
+
+The optional terminal-flash compatibility script changes Vortex's `app.asar`
+renderer only when the user explicitly runs it and always retains the complete
+original archive in the local backup directory above.
 
 Process launches avoid a command shell, custom arguments use bounded parsing, settings are validated before use, and asynchronous work is bounded by explicit timeouts. See [Architecture](docs/architecture.md) for the design and trust boundaries.
 
