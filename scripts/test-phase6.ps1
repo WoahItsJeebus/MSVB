@@ -75,9 +75,15 @@ try {
 	if ($windowsSource -notmatch
 		'function\s+detached_process_request\(executable,\s*arguments,\s*create_hidden_console\)' -or
 		$windowsSource -notmatch
-		'detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console\s*\)' -or
+		'(?s)local\s+function\s+start_detached_process\(\s*executable,\s*arguments,\s*create_hidden_console\s*\).*?detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console\s*\)' -or
 		$windowsSource -notmatch
-		'start_process_with_hidden_console\(executable,\s*arguments\)' -or
+		'function\s+M\.start_process\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*false\)\s*end' -or
+		$windowsSource -notmatch
+		'function\s+M\.start_process_with_hidden_console\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*true\)\s*end' -or
+		[regex]::Matches(
+			$windowsSource,
+			'function\s+M\.start_process\(executable,\s*arguments\)'
+		).Count -ne 1 -or
 		$windowsSource -notmatch
 		'direct_is_running_request\(executable_name\)') {
 		throw 'Detached targets and activation polling must bypass the PowerShell process runner.'

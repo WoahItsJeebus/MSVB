@@ -790,86 +790,6 @@ function M.run_process(executable, arguments, options)
     }
 end
 
-local function start_process_direct(
-    executable,
-    arguments,
-    create_hidden_console
-)
-    arguments = arguments or {}
-
-    if type(executable) ~= "string" or executable == "" then
-        return {
-            started = false,
-            error = "Executable path is empty",
-        }
-    end
-
-    local command_parts = { quote_windows_argument(executable) }
-    for _, argument in ipairs(arguments) do
-        if type(argument) ~= "string" then
-            return {
-                started = false,
-                error = "Process arguments must be strings",
-            }
-        end
-        command_parts[#command_parts + 1] = quote_windows_argument(argument)
-    end
-
-    local executable_wide, executable_error = utf8_to_wide(executable)
-    if executable_wide == nil then
-        return {
-            started = false,
-            error = executable_error,
-        }
-    end
-
-    local command_wide, command_error =
-        utf8_to_wide(table.concat(command_parts, " "))
-    if command_wide == nil then
-        return {
-            started = false,
-            error = command_error,
-        }
-    end
-
-    local startup = ffi.new("VLB_STARTUPINFOW")
-    startup.cb = ffi.sizeof(startup)
-    local process_info = ffi.new("VLB_PROCESS_INFORMATION")
-    local started_at = tonumber(kernel32.GetTickCount64())
-    local created = kernel32.CreateProcessW(
-        executable_wide,
-        command_wide,
-        nil,
-        nil,
-        0,
-        0,
-        nil,
-        nil,
-        startup,
-        process_info
-    )
-
-    if created == 0 then
-        local error_code = last_error()
-        return {
-            started = false,
-            errorCode = error_code,
-            error = "CreateProcessW failed with Windows error " ..
-                tostring(error_code),
-        }
-    end
-
-    local process_id = tonumber(process_info.dwProcessId)
-    close_handle(process_info.hThread)
-    close_handle(process_info.hProcess)
-
-    return {
-        started = true,
-        processId = process_id,
-        durationMs = tonumber(kernel32.GetTickCount64()) - started_at,
-    }
-end
-
 function M.monotonic_milliseconds()
     return tonumber(kernel32.GetTickCount64())
 end
@@ -1164,7 +1084,11 @@ function M.run_process(executable, arguments, options)
     return response
 end
 
-function M.start_process(executable, arguments)
+local function start_detached_process(
+    executable,
+    arguments,
+    create_hidden_console
+)
     arguments = arguments or {}
     if type(executable) ~= "string" or executable == "" then
         return {
@@ -1197,11 +1121,11 @@ function M.start_process(executable, arguments)
 end
 
 function M.start_process(executable, arguments)
-    return start_process_direct(executable, arguments, false)
+    return start_detached_process(executable, arguments, false)
 end
 
 function M.start_process_with_hidden_console(executable, arguments)
-    return start_process_direct(executable, arguments, true)
+    return start_detached_process(executable, arguments, true)
 end
 
 function M.monotonic_milliseconds()

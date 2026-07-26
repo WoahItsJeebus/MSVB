@@ -47,6 +47,9 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Reused an already-running Vortex instance when its latest bounded log state
   exactly confirms the requested game and last-active profile, avoiding a
   timeout caused by Vortex 2.3.0 ignoring redundant second-instance arguments.
+- Removed an overriding raw `CreateProcessW` launch path that used default
+  console creation flags, ensuring Vortex activation and custom targets always
+  use the Windows-subsystem broker's hidden, detached startup path.
 
 ## [1.0.4] - 2026-07-25
 
