@@ -41,6 +41,23 @@ Once the plugin is listed in the Steam Homebrew plugin catalog:
 3. Enter the plugin ID `<Eventual_Steambrew_ID_Here>` and install it.
 4. Restart Steam when prompted.
 
+### Direct GitHub installer
+
+For a direct installation that does not use the Steam Homebrew Plugin Database:
+
+1. Download `VortexLaunchBridgeInstaller.exe` from the
+   [latest GitHub release](https://github.com/WoahItsJeebus/MSVB/releases/latest).
+2. Fully close Steam, including its notification-area process.
+3. Run the installer and confirm the detected Millennium directory.
+4. Choose **Install/Repair**, then restart Steam and enable the plugin in
+   **Steam > Millennium Settings > Plugins** if necessary.
+
+The installer downloads an immutable snapshot of the latest `main` commit,
+installs the repository's pinned build dependencies in a temporary workspace,
+runs the production build, validates the runtime package, and atomically
+installs it under Millennium's user plugins directory. It also provides a
+**Delete** action that removes only this plugin's installation folder.
+
 ### Development installation
 
 Use this method for an unreleased build or local development.

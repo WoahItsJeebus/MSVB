@@ -2,6 +2,7 @@ node_modules/
 .millennium/
 dist/
 .pnpm-store/
+artifacts/
 
 *.log
 .DS_Store

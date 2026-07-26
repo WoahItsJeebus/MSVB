@@ -31,6 +31,8 @@ npm install --global pnpm@10.34.5
 pnpm install
 pnpm run build
 pnpm test
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-installer.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-installer-integration.ps1
 ```
 
 Complete the [manual release matrix](testing.md#manual-release-matrix). Also verify a clean Node 20 Linux environment can run the production build with the repository's pinned package manager:
@@ -46,6 +48,8 @@ NODE_ENV=production pnpm run build
 - [ ] Push the release commit to the public default branch.
 - [ ] Tag the exact commit as `vX.Y.Z`.
 - [ ] Create a GitHub release using the matching changelog section.
+- [ ] Upload `artifacts/VortexLaunchBridgeInstaller.exe` to the release and
+      record its SHA-256 checksum.
 - [ ] Confirm the tag and default branch build successfully.
 
 ## 5. Submit or update the database entry
