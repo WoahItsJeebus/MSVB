@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace VortexLaunchBridge.Installer
@@ -332,14 +333,82 @@ namespace VortexLaunchBridge.Installer
             Directory.Delete(directory, false);
         }
 
-        public static bool IsSteamRunning()
+        public static int ForceCloseSteam()
         {
-            try
+            return ForceCloseProcesses(new string[] { "steam", "steamwebhelper" });
+        }
+
+        internal static int ForceCloseProcesses(string[] processNames)
+        {
+            if (processNames == null || processNames.Length == 0)
             {
-                Process[] processes = Process.GetProcessesByName("steam");
+                return 0;
+            }
+
+            int terminatedCount = 0;
+            List<string> errors = new List<string>();
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                List<Process> processes = new List<Process>();
                 try
                 {
-                    return processes.Length > 0;
+                    foreach (string processName in processNames)
+                    {
+                        if (!String.IsNullOrWhiteSpace(processName))
+                        {
+                            processes.AddRange(Process.GetProcessesByName(processName));
+                        }
+                    }
+
+                    if (processes.Count == 0)
+                    {
+                        return terminatedCount;
+                    }
+
+                    foreach (Process process in processes)
+                    {
+                        try
+                        {
+                            if (!process.HasExited)
+                            {
+                                process.Kill();
+                                terminatedCount++;
+                            }
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // The process exited between discovery and termination.
+                        }
+                        catch (Exception ex)
+                        {
+                            errors.Add(process.ProcessName + " (PID " + SafeProcessId(process)
+                                + "): " + ex.Message);
+                        }
+                    }
+
+                    Stopwatch timeout = Stopwatch.StartNew();
+                    foreach (Process process in processes)
+                    {
+                        try
+                        {
+                            if (process.HasExited)
+                            {
+                                continue;
+                            }
+
+                            int remaining = Math.Max(0, 10000 - (int)timeout.ElapsedMilliseconds);
+                            if (remaining == 0 || !process.WaitForExit(remaining))
+                            {
+                                errors.Add(process.ProcessName + " (PID " + SafeProcessId(process)
+                                    + ") did not exit within 10 seconds.");
+                            }
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Already exited.
+                        }
+                    }
                 }
                 finally
                 {
@@ -348,10 +417,51 @@ namespace VortexLaunchBridge.Installer
                         process.Dispose();
                     }
                 }
+
+                Thread.Sleep(250);
+            }
+
+            List<string> survivors = new List<string>();
+            foreach (string processName in processNames)
+            {
+                Process[] remainingProcesses = Process.GetProcessesByName(processName);
+                try
+                {
+                    foreach (Process process in remainingProcesses)
+                    {
+                        survivors.Add(process.ProcessName + " (PID " + SafeProcessId(process) + ")");
+                    }
+                }
+                finally
+                {
+                    foreach (Process process in remainingProcesses)
+                    {
+                        process.Dispose();
+                    }
+                }
+            }
+
+            if (survivors.Count > 0)
+            {
+                string detail = errors.Count > 0
+                    ? String.Join(Environment.NewLine, errors.ToArray())
+                    : String.Join(", ", survivors.ToArray());
+                throw new InvalidOperationException(
+                    "Steam could not be closed completely." + Environment.NewLine + detail);
+            }
+
+            return terminatedCount;
+        }
+
+        private static string SafeProcessId(Process process)
+        {
+            try
+            {
+                return process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
             catch
             {
-                return false;
+                return "unknown";
             }
         }
     }

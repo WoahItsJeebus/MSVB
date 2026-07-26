@@ -23,14 +23,15 @@ instead of the Steam Homebrew Plugin Database.
   installed plugin.
 - Stages and swaps the plugin directory so a download or build failure leaves
   the existing installation unchanged.
+- Force-closes Steam and its web-helper processes before installing, repairing,
+  or deleting the plugin. It does not terminate Steam's entire process tree.
 - Deletes only
   `<Millennium>\plugins\vortex-launch-bridge`; locally stored plugin settings
   are intentionally preserved.
 
-Steam must be fully closed before Install/Repair or Delete. Current Millennium
-installations grant users access to their plugin directory, so the installer
-runs with the caller's normal Windows permissions instead of elevating the
-download and build toolchain.
+Current Millennium installations grant users access to their plugin directory,
+so the installer runs with the caller's normal Windows permissions instead of
+elevating the download and build toolchain.
 
 ## Build
 
@@ -48,7 +49,8 @@ artifacts\VortexLaunchBridgeInstaller.exe
 
 The build uses the .NET Framework compiler included with Windows/.NET
 Framework 4.8 and runs the path-safety test suite unless `-SkipTests` is
-provided.
+provided. `installer/favicon.ico` is embedded as the executable and window
+icon.
 
 An optional end-to-end test downloads and builds the current repository into an
 isolated temporary Millennium layout:

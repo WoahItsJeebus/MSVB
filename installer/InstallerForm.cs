@@ -28,9 +28,9 @@ namespace VortexLaunchBridge.Installer
             MaximizeBox = false;
             MinimizeBox = true;
             ShowIcon = true;
-            Icon = SystemIcons.Application;
-            ClientSize = new Size(680, 485);
-            MinimumSize = new Size(696, 524);
+            Icon = LoadApplicationIcon();
+            ClientSize = new Size(680, 500);
+            MinimumSize = new Size(696, 539);
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
             AutoScaleMode = AutoScaleMode.Dpi;
 
@@ -45,7 +45,7 @@ namespace VortexLaunchBridge.Installer
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 45F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
             Controls.Add(root);
 
             root.Controls.Add(CreateHeader(), 0, 0);
@@ -78,7 +78,7 @@ namespace VortexLaunchBridge.Installer
             buttons.Dock = DockStyle.Fill;
             buttons.FlowDirection = FlowDirection.RightToLeft;
             buttons.WrapContents = false;
-            buttons.Padding = new Padding(0, 8, 0, 0);
+            buttons.Padding = new Padding(0, 8, 0, 8);
 
             cancelButton = CreateButton("Cancel", 94);
             cancelButton.DialogResult = DialogResult.None;
@@ -113,12 +113,19 @@ namespace VortexLaunchBridge.Installer
             header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            PictureBox icon = new PictureBox();
-            icon.Image = SystemIcons.Application.ToBitmap();
-            icon.SizeMode = PictureBoxSizeMode.CenterImage;
-            icon.Dock = DockStyle.Fill;
-            header.Controls.Add(icon, 0, 0);
-            header.SetRowSpan(icon, 2);
+            PictureBox iconPicture = new PictureBox();
+            try
+            {
+                iconPicture.Image = Icon.ToBitmap();
+            }
+            catch
+            {
+                iconPicture.Image = SystemIcons.Application.ToBitmap();
+            }
+            iconPicture.SizeMode = PictureBoxSizeMode.CenterImage;
+            iconPicture.Dock = DockStyle.Fill;
+            header.Controls.Add(iconPicture, 0, 0);
+            header.SetRowSpan(iconPicture, 2);
 
             Label title = new Label();
             title.Text = InstallerConstants.ProductName;
@@ -193,6 +200,25 @@ namespace VortexLaunchBridge.Installer
             return button;
         }
 
+        private static Icon LoadApplicationIcon()
+        {
+            try
+            {
+                Icon associated = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (associated != null)
+                {
+                    return (Icon)associated.Clone();
+                }
+            }
+            catch
+            {
+                // Fall back to the standard application icon when running from
+                // a test harness without the compiled icon resource.
+            }
+
+            return (Icon)SystemIcons.Application.Clone();
+        }
+
         private void InstallerFormLoad(object sender, EventArgs eventArgs)
         {
             string detected = MillenniumPathResolver.DiscoverMillenniumDirectory();
@@ -207,7 +233,7 @@ namespace VortexLaunchBridge.Installer
             }
 
             AppendLog("Source: " + InstallerConstants.RepositoryUrl + " (" + InstallerConstants.RepositoryBranch + ")");
-            AppendLog("Steam must be fully closed before installing, repairing, or deleting the plugin.");
+            AppendLog("Steam and its web helpers will be force-closed automatically before any plugin changes.");
         }
 
         private void BrowseButtonClick(object sender, EventArgs eventArgs)
@@ -258,7 +284,7 @@ namespace VortexLaunchBridge.Installer
                 return;
             }
 
-            if (!EnsureSteamIsClosed())
+            if (!ForceCloseSteamIfRunning())
             {
                 return;
             }
@@ -346,7 +372,7 @@ namespace VortexLaunchBridge.Installer
                 MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2);
 
-            if (confirmation != DialogResult.Yes || !EnsureSteamIsClosed())
+            if (confirmation != DialogResult.Yes || !ForceCloseSteamIfRunning())
             {
                 return;
             }
@@ -419,20 +445,28 @@ namespace VortexLaunchBridge.Installer
             }
         }
 
-        private bool EnsureSteamIsClosed()
+        private bool ForceCloseSteamIfRunning()
         {
-            if (!SafeFileSystem.IsSteamRunning())
+            try
             {
+                int closedProcesses = SafeFileSystem.ForceCloseSteam();
+                if (closedProcesses > 0)
+                {
+                    AppendLog("Force-closed Steam and its web-helper processes.");
+                }
                 return true;
             }
-
-            MessageBox.Show(
-                this,
-                "Steam is currently running. Fully exit Steam, including its notification-area process, and try again.",
-                InstallerConstants.ProductName + " Setup",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            return false;
+            catch (Exception ex)
+            {
+                AppendLog("ERROR: Steam could not be closed: " + ex.Message);
+                MessageBox.Show(
+                    this,
+                    "Steam could not be closed automatically:\r\n\r\n" + ex.Message,
+                    InstallerConstants.ProductName + " Setup",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return false;
+            }
         }
 
         private void SetOperationRunning(bool running)

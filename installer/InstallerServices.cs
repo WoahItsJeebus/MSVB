@@ -143,10 +143,16 @@ namespace VortexLaunchBridge.Installer
                 ValidateRuntimePackage(runtimePackage);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                if (requireSteamClosed && SafeFileSystem.IsSteamRunning())
+                if (requireSteamClosed)
                 {
-                    throw new InvalidOperationException(
-                        "Steam was started while the plugin was building. Fully exit Steam and run Install/Repair again.");
+                    int closedProcesses = SafeFileSystem.ForceCloseSteam();
+                    if (closedProcesses > 0)
+                    {
+                        Report(
+                            "Steam was reopened during the build and was force-closed before deployment.",
+                            86,
+                            false);
+                    }
                 }
 
                 Report("Installing plugin into Millennium...", 88, false);

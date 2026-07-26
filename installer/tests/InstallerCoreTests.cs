@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
 namespace VortexLaunchBridge.Installer
 {
@@ -7,8 +9,14 @@ namespace VortexLaunchBridge.Installer
     {
         private static int failures;
 
-        private static int Main()
+        private static int Main(string[] arguments)
         {
+            if (arguments.Length == 1 && arguments[0] == "--force-close-probe")
+            {
+                Thread.Sleep(60000);
+                return 0;
+            }
+
             string testRoot = Path.Combine(
                 Path.GetTempPath(),
                 "VortexLaunchBridgeInstallerTests",
@@ -21,6 +29,7 @@ namespace VortexLaunchBridge.Installer
                 TestUnsafePathRejection(testRoot);
                 TestSafeDelete(testRoot);
                 TestCommandLineQuoting();
+                TestTargetedProcessClose(testRoot);
             }
             catch (Exception ex)
             {
@@ -117,6 +126,30 @@ namespace VortexLaunchBridge.Installer
                 WindowsCommandLine.QuoteArgument("C:\\ends with slash\\")
                     == "\"C:\\ends with slash\\\\\"",
                 "Trailing slashes in quoted arguments must be escaped.");
+        }
+
+        private static void TestTargetedProcessClose(string testRoot)
+        {
+            string currentExecutable = Process.GetCurrentProcess().MainModule.FileName;
+            string probeName = "VlbForceCloseProbe" + Guid.NewGuid().ToString("N");
+            string probeExecutable = Path.Combine(testRoot, probeName + ".exe");
+            File.Copy(currentExecutable, probeExecutable, false);
+
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.FileName = probeExecutable;
+            startInfo.Arguments = "--force-close-probe";
+            startInfo.UseShellExecute = false;
+            startInfo.CreateNoWindow = true;
+
+            using (Process probe = Process.Start(startInfo))
+            {
+                Thread.Sleep(200);
+                int closed = SafeFileSystem.ForceCloseProcesses(new string[] { probeName });
+                Assert(closed == 1, "Targeted process close should terminate exactly one probe.");
+                Assert(probe.WaitForExit(5000), "Targeted process close did not stop the probe.");
+            }
+
+            File.Delete(probeExecutable);
         }
 
         private static void AssertResolves(

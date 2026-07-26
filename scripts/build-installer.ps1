@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [ValidatePattern('^[A-Za-z0-9._-]+\.exe$')]
+    [string]$OutputFileName = 'VortexLaunchBridgeInstaller.exe'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,7 +25,12 @@ if (-not $compiler) {
 
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 
-$outputPath = Join-Path $artifactRoot 'VortexLaunchBridgeInstaller.exe'
+$outputPath = Join-Path $artifactRoot $OutputFileName
+$iconPath = Join-Path $installerRoot 'favicon.ico'
+if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+    throw "Installer icon not found: $iconPath"
+}
+
 $sourceFiles = @(
     (Join-Path $installerRoot 'AssemblyInfo.cs'),
     (Join-Path $installerRoot 'InstallerCore.cs'),
@@ -51,6 +58,7 @@ $compilerArguments = @(
     '/warn:4',
     '/checked+',
     ('/win32manifest:' + (Join-Path $installerRoot 'app.manifest')),
+    ('/win32icon:' + $iconPath),
     ('/out:' + $outputPath)
 )
 $compilerArguments += $references | ForEach-Object { '/reference:' + $_ }
