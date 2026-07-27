@@ -1,5 +1,7 @@
 <p align="center">
-   <img alt="GitHub Release" src="https://img.shields.io/github/v/release/WoahItsJeebus/MSVB?sort=semver&filter=Installer&display_name=tag&style=for-the-badge&label=Download">
+   <a href="https://github.com/WoahItsJeebus/MSVB/releases/download/Installer/VortexLaunchBridgeInstaller.exe">
+      <img alt="GitHub Release" src="https://img.shields.io/github/v/release/WoahItsJeebus/MSVB?sort=semver&filter=Installer&display_name=tag&style=for-the-badge&label=Download">
+   </a>
 </p>
 
 
