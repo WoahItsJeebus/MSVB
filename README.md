@@ -141,20 +141,23 @@ Settings are stored locally at:
 
 ### A terminal flashes while Vortex starts
 
-Vortex 2.3.0 starts its bundled console-subsystem `.NET` probe without Node's
-`windowsHide` option. With Vortex fully exited, run the guarded compatibility
-repair from an administrator PowerShell:
+Vortex 2.3.0 starts its bundled console-subsystem `.NET` probe, its
+`fsutil dirty query` administrator check, and some shell-backed startup tools
+without Node's `windowsHide` option. With Vortex fully exited, run the guarded
+compatibility repair from an administrator PowerShell:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\patch-vortex-dotnetprobe.ps1
 ```
 
-The script validates Vortex's ASAR layout and renderer hash, creates a complete
+The script validates Vortex's ASAR layout and affected file hashes, removes the
+command shell from the administrator check, and creates a complete
 hash-verified archive backup under
 `%LOCALAPPDATA%\VortexLaunchBridge\Backups`, inserts the missing option without
-changing any file size, updates the renderer integrity hashes, and verifies the
-result. Vortex's signed probe remains untouched. A later Vortex update may
-restore the official renderer; rerun the repair only if the flash returns.
+changing any file size, updates the corresponding integrity hashes, and
+verifies the result. Vortex's signed probe remains untouched. A later Vortex
+update may restore the official files; rerun the repair only if the flash
+returns.
 
 ### Logs
 

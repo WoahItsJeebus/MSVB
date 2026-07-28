@@ -50,6 +50,12 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Removed an overriding raw `CreateProcessW` launch path that used default
   console creation flags, ensuring Vortex activation and custom targets always
   use the Windows-subsystem broker's hidden, detached startup path.
+- Extended the guarded Vortex renderer repair to apply `windowsHide` to its
+  shared executable-spawn wrapper, preventing `shell: true` startup tools from
+  briefly exposing `cmd.exe` and `conhost.exe` during cold activation.
+- Removed the command shell from Vortex's main-process `fsutil dirty query`
+  administrator check and hid the direct executable, eliminating the remaining
+  `cmd.exe` console race before its renderer initialized.
 
 ## [1.0.4] - 2026-07-25
 

@@ -42,6 +42,7 @@ public sealed class VlbProcessSnapshot
     public int ProcessId;
     public int ParentProcessId;
     public string ProcessName;
+    public string CommandLine;
 }
 
 public static class VlbWindowEnumerator
@@ -50,6 +51,8 @@ public static class VlbWindowEnumerator
     private const int GwlExtendedStyle = -20;
     private const int DwmwaCloaked = 14;
     private const uint Th32csSnapProcess = 0x00000002;
+    private const uint ProcessQueryLimitedInformation = 0x00001000;
+    private const int ProcessCommandLineInformation = 60;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
@@ -88,6 +91,14 @@ public static class VlbWindowEnumerator
 
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
         public string ExecutableFile;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString
+    {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
     }
 
     private delegate bool EnumWindowsCallback(IntPtr window, IntPtr parameter);
@@ -142,11 +153,103 @@ public static class VlbWindowEnumerator
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(IntPtr handle);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(
+        uint desiredAccess,
+        bool inheritHandle,
+        uint processId
+    );
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        IntPtr process,
+        int informationClass,
+        IntPtr information,
+        int informationLength,
+        out int returnLength
+    );
+
     private static long GetWindowLong(IntPtr window, int index)
     {
         return IntPtr.Size == 8
             ? GetWindowLongPtr64(window, index).ToInt64()
             : GetWindowLong32(window, index);
+    }
+
+    private static string GetCommandLine(uint processId, string processName)
+    {
+        switch ((processName ?? string.Empty).ToLowerInvariant())
+        {
+            case "cmd.exe":
+            case "powershell.exe":
+            case "pwsh.exe":
+            case "dotnetprobe.exe":
+            case "process_shell.exe":
+            case "vortex.exe":
+                break;
+            default:
+                return null;
+        }
+
+        var process = OpenProcess(
+            ProcessQueryLimitedInformation,
+            false,
+            processId
+        );
+        if (process == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            int required;
+            NtQueryInformationProcess(
+                process,
+                ProcessCommandLineInformation,
+                IntPtr.Zero,
+                0,
+                out required
+            );
+            if (required <= Marshal.SizeOf(typeof(UnicodeString)) ||
+                required > 32768)
+            {
+                return null;
+            }
+
+            var buffer = Marshal.AllocHGlobal(required);
+            try
+            {
+                if (NtQueryInformationProcess(
+                    process,
+                    ProcessCommandLineInformation,
+                    buffer,
+                    required,
+                    out required
+                ) != 0)
+                {
+                    return null;
+                }
+                var commandLine = (UnicodeString)Marshal.PtrToStructure(
+                    buffer,
+                    typeof(UnicodeString)
+                );
+                return commandLine.Buffer == IntPtr.Zero
+                    ? null
+                    : Marshal.PtrToStringUni(
+                        commandLine.Buffer,
+                        commandLine.Length / 2
+                    );
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
     }
 
     public static VlbWindowSnapshot[] CaptureVisible()
@@ -222,6 +325,10 @@ public static class VlbWindowEnumerator
                     ProcessId = unchecked((int)entry.ProcessId),
                     ParentProcessId = unchecked((int)entry.ParentProcessId),
                     ProcessName = entry.ExecutableFile ?? string.Empty,
+                    CommandLine = GetCommandLine(
+                        entry.ProcessId,
+                        entry.ExecutableFile
+                    ),
                 });
                 entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
             }
@@ -316,6 +423,7 @@ try {
 					processId = $process.ProcessId
 					parentProcessId = $process.ParentProcessId
 					processName = $process.ProcessName
+					commandLine = $process.CommandLine
 				})))
 			}
 		}

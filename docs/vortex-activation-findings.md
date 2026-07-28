@@ -32,7 +32,7 @@ The installed Vortex 2.3.0 renderer consumes a cold-start `--profile` by selecti
 skips its splash screen and hides its BrowserWindow after initialization while
 profile synchronization and deployment continue in the renderer.
 
-## Vortex 2.3.0 dotnet probe
+## Vortex 2.3.0 console children
 
 The installed renderer checks the `.NET` desktop runtime with
 `child_process.execFile(dotnetprobe.exe, args)` and omits the supported
@@ -41,14 +41,20 @@ executable, Windows allocates a briefly visible `conhost.exe` roughly four
 seconds into a cold Vortex startup. Hiding the parent Electron process cannot
 prevent that independent console allocation.
 
-The guarded `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair adds
-`{windowsHide:true}` to that exact renderer call. It creates and hash-checks a
-complete `app.asar` backup, uses a same-size JavaScript replacement so archive
-offsets remain unchanged, updates both renderer integrity hashes, and leaves the
-signed probe untouched. Windows may still create a short-lived console-host
-process for the signed Console-subsystem executable, but Node starts it hidden.
-A high-frequency cold activation trace must show no visible console window.
-Vortex updates can restore the official renderer, so the repair remains
+Before the renderer initializes, Vortex's bundled `is-admin` module separately
+runs `cmd.exe /q /s /c "fsutil dirty query %systemdrive%"` through
+`execa.shell`. That main-process call also omits `windowsHide`, so it can expose
+a console even when every renderer child is hidden.
+
+The guarded `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair replaces
+the administrator shell with a direct, argument-array `fsutil.exe` invocation
+and adds `windowsHide` to it and the exact probe and executable-spawn calls. The
+repair creates and hash-checks a complete `app.asar` backup, uses same-size
+JavaScript replacements so archive offsets remain unchanged, updates the
+affected file integrity hashes, and leaves the signed probe untouched. Windows
+may still create short-lived console-host processes, but Node starts them
+hidden. A high-frequency cold activation trace must show no visible console
+window. Vortex updates can restore the official files, so the repair remains
 explicit and repeatable rather than modifying Vortex automatically.
 
 ## Readiness contract

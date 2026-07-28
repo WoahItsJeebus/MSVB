@@ -108,9 +108,19 @@ try {
 		-not $dotnetProbePatch.Contains(
 			'(file,args,{windowsHide:true})'
 		) -or
+		-not $dotnetProbePatch.Contains(
+			'o={cwd,env,windowsHide:!0,detached:'
+		) -or
+		-not $dotnetProbePatch.Contains(
+			"execa('fsutil', ['dirty', 'query', "
+		) -or
 		$dotnetProbePatch -notmatch
-		'patchedRendererHash') {
-		throw 'The Vortex dotnet-probe repair must validate, back up, and verify its same-size ASAR edit.'
+			'shellLaunchPatched\s*=\s*\$true' -or
+		$dotnetProbePatch -notmatch
+			'adminCheckPatched\s*=\s*\$true' -or
+		$dotnetProbePatch -notmatch
+			'patchedAdminCheckHash') {
+		throw 'The Vortex child-process repair must validate, back up, and verify its same-size ASAR edit.'
 	}
 	if ($backendMain -notmatch 'function\s+verify_process_bridge\(\)') {
 		throw 'Backend startup must expose process bridge verification.'
