@@ -1,3 +1,10 @@
+<p align="center">
+   <a href="https://github.com/WoahItsJeebus/MSVB/releases/download/Installer/VortexLaunchBridgeInstaller.exe">
+      <img alt="GitHub Release" src="https://img.shields.io/github/v/release/WoahItsJeebus/MSVB?sort=semver&filter=Installer&display_name=tag&style=for-the-badge&label=Download">
+   </a>
+</p>
+
+
 # Vortex Launch Bridge
 
 [![Version](https://img.shields.io/badge/version-1.0.4-2ea3f2)](CHANGELOG.md)
