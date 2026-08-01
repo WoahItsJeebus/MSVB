@@ -111,6 +111,10 @@ Vortex Launch Bridge scans Vortex's read-only state in the background when Steam
 
 For the most reliable profile activation with Vortex 2.3.0, close Vortex before choosing **Launch with Vortex**. Vortex currently applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
 
+If activation times out, **Retry** force-closes all running Vortex instances and
+repeats the same held profile activation as a cold start. Steam remains held
+until the retried activation is confirmed, continued through Steam, or cancelled.
+
 ## Settings
 
 Open **Steam > Millennium Settings > Plugins > Vortex Launch Bridge** to configure:

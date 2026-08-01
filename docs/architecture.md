@@ -38,7 +38,7 @@ The Steam continuation path replays the original typed tuple once. Its bypass to
 
 Discovery and matching use read-only Vortex state. The plugin never uses Vortex state mutation operations and never edits profile or deployment files directly.
 
-Vortex 2.3.0 only applies profile-selection arguments reliably during a cold start. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success when an already-running Vortex instance ignores the request.
+Vortex 2.3.0 only applies profile-selection arguments reliably during a cold start. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success when an already-running Vortex instance ignores the request. Activation retry force-terminates exact-name `Vortex.exe` processes, verifies that none remain, and only then repeats the held activation.
 
 ### Process execution
 

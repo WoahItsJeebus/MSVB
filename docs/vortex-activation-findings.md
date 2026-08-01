@@ -106,10 +106,12 @@ The installed Vortex 2.3.0 bundle matches that source behavior. Consequently:
 
 The error dialog warns that Vortex may still finish a requested change and offers exactly:
 
+- `Retry`
 - `Continue launching with Steam...`
 - `Cancel`
 
-This limitation is surfaced rather than bypassed with direct Vortex state edits.
+Retry uses a bounded, exact-name process shutdown to obtain the cold start that
+Vortex requires. This limitation is not bypassed with direct Vortex state edits.
 
 ## Frontend flow
 
@@ -130,6 +132,7 @@ After exact activation/deployment confirmation, the initial Phase 5 launch targe
 ## Failure and unload behavior
 
 - Invalid identifiers, missing Vortex, process-start failure, early Vortex exit, missing readiness location, timeout, or an unconfirmed result open the activation error dialog.
+- A failed activation can be retried in place. Retry force-closes every `Vortex.exe` process, waits until Vortex is no longer running, and only then repeats the same held profile activation.
 - A backend bridge exception also disables future interception for the session; the held request remains recoverable through the error dialog.
 - Selecting Continue replays the original Steam tuple once.
 - Selecting Cancel, closing, or pressing Escape cancels the held request.
@@ -159,9 +162,10 @@ Use a short, harmless installed game and collect `[VLB]` records.
 5. Dismiss the profile picker and confirm Steam does not start.
 6. Dismiss the activation progress dialog and confirm Steam does not start even if Vortex later completes.
 7. Start Vortex manually after the launch-choice modal appears, then choose Vortex. Confirm the request times out to the error dialog instead of starting Steam without confirmation.
-8. Select `Continue launching with Steam...` and confirm the original request starts exactly once.
-9. Repeat the failure and select Cancel, close, and Escape in turn; confirm none starts the game.
-10. Disable the plugin during activation. Confirm the held request fails open once and a later activation result does not launch a second time.
-11. Confirm normal logs contain no game/profile IDs, profile names, Vortex paths, or Vortex log contents.
+8. Select **Retry**. Confirm all existing Vortex processes close, Vortex cold-starts minimized with the same profile, and the held game launches exactly once after confirmation.
+9. Repeat the failure, select `Continue launching with Steam...`, and confirm the original request starts exactly once.
+10. Repeat the failure and select Cancel, close, and Escape in turn; confirm none starts the game.
+11. Disable the plugin during activation. Confirm the held request fails open once and a later activation result does not launch a second time.
+12. Confirm normal logs contain no game/profile IDs, profile names, Vortex paths, or Vortex log contents.
 
 Do not treat Phase 5 as runtime-confirmed until this matrix has been performed from the interactive Steam/Millennium user session.

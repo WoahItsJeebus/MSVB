@@ -319,17 +319,21 @@ function activate_vortex_profile(request_json)
     local vortex_profile_id = request and request.vortex_profile_id
     local vortex_profile_is_last_active =
         request and request.vortex_profile_is_last_active == true
+    local force_restart_vortex =
+        request and request.force_restart_vortex == true
     log.info("vortex.activation.started", {
         gameIdRedacted = type(vortex_game_id) == "string",
         profileIdRedacted = type(vortex_profile_id) == "string",
         profileWasLastActive = vortex_profile_is_last_active,
+        forceRestartRequested = force_restart_vortex,
     })
 
     local activation_ok, activation = pcall(
         vortex_launcher.activate,
         vortex_game_id,
         vortex_profile_id,
-        vortex_profile_is_last_active
+        vortex_profile_is_last_active,
+        force_restart_vortex
     )
     if not activation_ok then
         log.error("vortex.activation.failed", {
@@ -365,6 +369,9 @@ function activate_vortex_profile(request_json)
         deploymentConfirmed = activation.deploymentConfirmed == true,
         readinessAvailable = activation.readinessAvailable == true,
         readinessSignal = activation.readinessSignal,
+        forceRestartRequested = activation.vortexRestartRequested == true,
+        vortexProcessesTerminated =
+            activation.vortexProcessesTerminated,
         identifiersRedacted = true,
     }
     if activation.ok == true then

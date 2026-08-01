@@ -19,9 +19,13 @@ const success = parseVortexActivationResult({
 	deploymentConfirmed: true,
 	readinessAvailable: true,
 	readinessSignal: 'vortex-log-profile-switch',
+	vortexRestartRequested: true,
+	vortexProcessesTerminated: 4,
 });
 assert(success.ok, 'A confirmed activation response should parse.');
 assert(success.deploymentConfirmed, 'Deployment confirmation must be retained.');
+assert(success.vortexRestartRequested, 'The forced-restart marker must be retained.');
+assert(success.vortexProcessesTerminated === 4, 'The terminated process count must be retained.');
 
 const alreadyActive = parseVortexActivationResult({
 	ok: true,

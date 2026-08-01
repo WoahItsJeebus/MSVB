@@ -126,6 +126,7 @@ export async function activateVortexProfile(
 	gameId: string,
 	profileId: string,
 	profileIsLastActive: boolean,
+	forceRestartVortex = false,
 ): Promise<VortexActivationResult> {
 	const response = await withTimeout(
 		requestActivation({
@@ -133,6 +134,7 @@ export async function activateVortexProfile(
 				vortex_game_id: gameId,
 				vortex_profile_id: profileId,
 				vortex_profile_is_last_active: profileIsLastActive,
+				force_restart_vortex: forceRestartVortex,
 			}),
 		}),
 		310_000,

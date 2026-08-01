@@ -61,6 +61,10 @@ try {
 		$processShellSource -notmatch 'NormalizeChildEnvironment\(' -or
 		$processShellSource -notmatch 'RunIsProcessRunning\(' -or
 		$processShellSource -notmatch '--vlb-is-running' -or
+		$processShellSource -notmatch 'RunTerminateVortex\(' -or
+		$processShellSource -notmatch '--vlb-terminate-vortex' -or
+		$processShellSource -notmatch 'Process\.GetProcessesByName\("Vortex"\)' -or
+		$processShellSource -notmatch 'process\.Kill\(\)' -or
 		$processShellSource -notmatch
 			'createHiddenConsole\s*\?\s*CreateNewConsole\s*:\s*DetachedProcess' -or
 		$processShellSource -notmatch
@@ -85,7 +89,8 @@ try {
 			'function\s+M\.start_process\(executable,\s*arguments\)'
 		).Count -ne 1 -or
 		$windowsSource -notmatch
-		'direct_is_running_request\(executable_name\)') {
+			'direct_is_running_request\(executable_name\)' -or
+		$windowsSource -notmatch 'function\s+M\.terminate_vortex\(\)') {
 		throw 'Detached targets and activation polling must bypass the PowerShell process runner.'
 	}
 	$vortexLauncherSource =
@@ -93,6 +98,10 @@ try {
 	if ($vortexLauncherSource -notmatch
 		'local\s+process\s*=\s*windows\.start_process\(') {
 		throw 'Vortex activation must use the direct detached launcher.'
+	}
+	if ($vortexLauncherSource -notmatch
+		'(?s)if\s+restart_requested\s+then.*?windows\.terminate_vortex\(\).*?local\s+process\s*=\s*windows\.start_process\(') {
+		throw 'Forced activation retries must terminate Vortex before relaunching it.'
 	}
 	if (-not (Test-Path -LiteralPath 'scripts\patch-vortex-dotnetprobe.ps1')) {
 		throw 'The guarded Vortex dotnet-probe compatibility repair is missing.'
@@ -153,6 +162,14 @@ try {
 	}
 	if ($launchInterceptor -notmatch 'popupWidth:\s*720') {
 		throw 'The three-action launch modal must request enough width for single-line action labels.'
+	}
+	$activationErrorModal = Get-Content -LiteralPath 'frontend\ui\ActivationErrorModal.tsx' -Raw
+	if ($activationErrorModal -notmatch "'Retry'" -or
+		$activationErrorModal -notmatch 'onMiddleButton=\{onRetry' -or
+		$launchInterceptor -notmatch 'retryVortexActivation\(' -or
+		$launchInterceptor -notmatch 'activateProfile\(pending,\s*match,\s*profile,\s*true\)' -or
+		$launchInterceptor -notmatch 'forceRestartVortex,') {
+		throw 'Activation recovery must expose a force-closing Vortex retry action.'
 	}
 
 	$steamModalChrome = Get-Content -LiteralPath 'frontend\ui\SteamModalChrome.tsx' -Raw

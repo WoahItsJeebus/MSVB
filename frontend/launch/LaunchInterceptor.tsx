@@ -236,6 +236,7 @@ export function startLaunchInterception(): LaunchInterception {
 		warning: string | undefined,
 		continueReason: string,
 		cancelReason: CancellationReason,
+		onRetry?: () => void,
 	): void {
 		if (!isCurrent(pending) || !active) {
 			removePending(pending);
@@ -248,6 +249,7 @@ export function startLaunchInterception(): LaunchInterception {
 			<ActivationErrorModal
 				message={message}
 				warning={warning}
+				onRetry={onRetry}
 				onContinueWithSteam={() => continueWithSteam(pending, continueReason)}
 				onCancel={() => cancelPending(pending, cancelReason)}
 			/>,
@@ -255,6 +257,7 @@ export function startLaunchInterception(): LaunchInterception {
 				strTitle: title,
 				bHideMainWindowForPopouts: false,
 				bNeverPopOut: true,
+				...(onRetry === undefined ? {} : { popupWidth: 720 }),
 			},
 		);
 	}
@@ -428,6 +431,7 @@ export function startLaunchInterception(): LaunchInterception {
 		pending: PendingLaunch,
 		message: string,
 		warning?: string,
+		onRetry?: () => void,
 	): void {
 		showRecoveryFailure(
 			pending,
@@ -436,13 +440,34 @@ export function startLaunchInterception(): LaunchInterception {
 			warning,
 			'activation-failed-user-continued',
 			'activation-failure-cancelled',
+			onRetry,
 		);
+	}
+
+	function retryVortexActivation(
+		pending: PendingLaunch,
+		match: VortexGameMatch,
+		profile: VortexProfile,
+	): void {
+		if (!isCurrent(pending) || !active || pending.state !== 'failed') {
+			return;
+		}
+		pending.state = 'selecting-profile';
+		log.info('vortex.activation.retry_requested', {
+			requestId: pending.request.requestId,
+			steamAppId: pending.request.numericAppId,
+			profileIdRedacted: true,
+			gameIdRedacted: true,
+			forceRestartRequested: true,
+		});
+		void activateProfile(pending, match, profile, true);
 	}
 
 	async function activateProfile(
 		pending: PendingLaunch,
 		match: VortexGameMatch,
 		profile: VortexProfile,
+		forceRestartVortex = false,
 	): Promise<void> {
 		if (!isCurrent(pending) || !active || pending.state !== 'selecting-profile') {
 			return;
@@ -459,6 +484,7 @@ export function startLaunchInterception(): LaunchInterception {
 		closeModal(pending);
 		pending.modal = showDesktopModal(
 			<ActivationProgressModal
+				restartingVortex={forceRestartVortex}
 				onDismiss={() => cancelPending(pending, 'activation-cancelled')}
 			/>,
 			{
@@ -479,6 +505,7 @@ export function startLaunchInterception(): LaunchInterception {
 				match.vortexGameId,
 				profile.id,
 				profile.isLastActive === true,
+				forceRestartVortex,
 			);
 			if (!isCurrent(pending) || !active) {
 				return;
@@ -498,12 +525,15 @@ export function startLaunchInterception(): LaunchInterception {
 					isVortexRunningAfter: result.isVortexRunningAfter,
 					readinessAvailable: result.readinessAvailable,
 					readinessSignal: result.readinessSignal,
+					forceRestartRequested: result.vortexRestartRequested === true,
+					vortexProcessesTerminated: result.vortexProcessesTerminated,
 					identifiersRedacted: true,
 				});
 				showActivationFailure(
 					pending,
 					result.error ?? 'Vortex did not confirm the selected profile.',
 					result.warning,
+					() => retryVortexActivation(pending, match, profile),
 				);
 				return;
 			}

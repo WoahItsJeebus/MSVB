@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 internal static class ProcessShell
 {
@@ -398,6 +399,94 @@ internal static class ProcessShell
         }
     }
 
+    private static bool IsVortexRunning()
+    {
+        var processes = Process.GetProcessesByName("Vortex");
+        try
+        {
+            return processes.Length > 0;
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    private static bool TerminateVortexProcesses(
+        HashSet<int> terminatedProcessIds
+    )
+    {
+        var processes = Process.GetProcessesByName("Vortex");
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        var processId = process.Id;
+                        process.Kill();
+                        terminatedProcessIds.Add(processId);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited between enumeration and termination.
+                }
+                catch
+                {
+                    // The bounded verification below determines whether retrying
+                    // is safe even if one process handle could not be terminated.
+                }
+            }
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+
+        return processes.Length > 0;
+    }
+
+    private static int RunTerminateVortex()
+    {
+        var found = false;
+        var terminatedProcessIds = new HashSet<int>();
+
+        var stopwatch = Stopwatch.StartNew();
+        var running = true;
+        while (running)
+        {
+            found = TerminateVortexProcesses(terminatedProcessIds) || found;
+            running = IsVortexRunning();
+            if (!running || stopwatch.ElapsedMilliseconds >= 2500)
+            {
+                break;
+            }
+            Thread.Sleep(50);
+        }
+
+        var ok = !running;
+        WriteStandardOutput(
+            "{\"ok\":" + (ok ? "true" : "false") +
+            ",\"found\":" + (found ? "true" : "false") +
+            ",\"terminatedCount\":" +
+            terminatedProcessIds.Count.ToString(CultureInfo.InvariantCulture) +
+            ",\"running\":" + (running ? "true" : "false") +
+            (ok
+                ? "}"
+                : ",\"error\":\"Vortex did not exit after it was force-closed.\"}")
+        );
+        return ok ? 0 : 1;
+    }
+
     private static string QuoteArgument(string value)
     {
         if (value.Length == 0)
@@ -512,6 +601,19 @@ internal static class ProcessShell
                     return 87;
                 }
                 return RunIsProcessRunning(args[commandIndex + 1]);
+            }
+
+            if (string.Equals(
+                args[commandIndex],
+                "--vlb-terminate-vortex",
+                StringComparison.OrdinalIgnoreCase
+            ))
+            {
+                if (commandIndex + 1 != args.Length)
+                {
+                    return 87;
+                }
+                return RunTerminateVortex();
             }
 
             var executable = args[commandIndex];

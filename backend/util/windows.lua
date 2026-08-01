@@ -526,6 +526,12 @@ local function direct_is_running_request(executable_name)
     }, "process-state query")
 end
 
+local function direct_terminate_vortex_request()
+    return direct_process_shell_request({
+        "--vlb-terminate-vortex",
+    }, "Vortex termination request")
+end
+
 local function create_pipe(parent_end)
     local security = ffi.new("VLB_SECURITY_ATTRIBUTES")
     security.nLength = ffi.sizeof(security)
@@ -1151,6 +1157,29 @@ function M.is_process_running(executable_name)
     local response = direct_is_running_request(executable_name)
     return response ~= nil and response.ok == true and
         response.running == true
+end
+
+function M.terminate_vortex()
+    local response, bridge_error = direct_terminate_vortex_request()
+    if response == nil then
+        return {
+            ok = false,
+            found = false,
+            terminatedCount = 0,
+            running = M.is_process_running("Vortex.exe"),
+            error = bridge_error or
+                "The Vortex termination request failed",
+        }
+    end
+
+    return {
+        ok = response.ok == true,
+        found = response.found == true,
+        terminatedCount = tonumber(response.terminatedCount) or 0,
+        running = response.running == true,
+        error = type(response.error) == "string" and
+            response.error or nil,
+    }
 end
 
 function M.get_steam_install_path()

@@ -306,7 +306,12 @@ function M.activation_arguments(game_id, profile_id, profile_is_last_active)
     return arguments
 end
 
-function M.activate(game_id, profile_id, profile_is_last_active)
+function M.activate(
+    game_id,
+    profile_id,
+    profile_is_last_active,
+    force_restart
+)
     local timeout_ms = settings.get().vortexActivationTimeoutMs
     if not valid_identifier(game_id) or not valid_identifier(profile_id) then
         return failure_result(
@@ -330,6 +335,29 @@ function M.activate(game_id, profile_id, profile_is_last_active)
         )
     end
 
+    local running_before = windows.is_process_running(PROCESS_NAME)
+    local restart_requested = force_restart == true
+    local terminated_process_count = 0
+    if restart_requested then
+        local termination = windows.terminate_vortex()
+        terminated_process_count =
+            tonumber(termination and termination.terminatedCount) or 0
+        if termination == nil or termination.ok ~= true then
+            return failure_result(
+                termination and termination.error or
+                    "Vortex could not be force-closed before retrying.",
+                timeout_ms,
+                {
+                    wasVortexRunning = running_before,
+                    isVortexRunningAfter =
+                        windows.is_process_running(PROCESS_NAME),
+                    vortexRestartRequested = true,
+                    vortexProcessesTerminated = terminated_process_count,
+                }
+            )
+        end
+    end
+
     local log_paths = activation_log_paths()
     local cursors = {}
     for _, path in ipairs(log_paths) do
@@ -341,13 +369,15 @@ function M.activate(game_id, profile_id, profile_is_last_active)
             timeout_ms,
             {
                 readinessAvailable = false,
+                vortexRestartRequested = restart_requested,
+                vortexProcessesTerminated = terminated_process_count,
             }
         )
     end
 
-    local running_before = windows.is_process_running(PROCESS_NAME)
     local started_at = windows.monotonic_milliseconds()
-    if running_before and profile_is_last_active == true and
+    if not restart_requested and running_before and
+        profile_is_last_active == true and
         recent_log_confirms_running_profile(
             log_paths,
             game_id,
@@ -367,6 +397,8 @@ function M.activate(game_id, profile_id, profile_is_last_active)
             deploymentConfirmed = true,
             readinessAvailable = true,
             readinessSignal = ALREADY_ACTIVE_READINESS_SIGNAL,
+            vortexRestartRequested = restart_requested,
+            vortexProcessesTerminated = terminated_process_count,
         }
     end
 
@@ -391,6 +423,8 @@ function M.activate(game_id, profile_id, profile_is_last_active)
                 wasVortexRunning = running_before,
                 isVortexRunningAfter =
                     windows.is_process_running(PROCESS_NAME),
+                vortexRestartRequested = restart_requested,
+                vortexProcessesTerminated = terminated_process_count,
             }
         )
     end
@@ -421,6 +455,8 @@ function M.activate(game_id, profile_id, profile_is_last_active)
                     deploymentConfirmed = true,
                     readinessAvailable = true,
                     readinessSignal = readiness_signal,
+                    vortexRestartRequested = restart_requested,
+                    vortexProcessesTerminated = terminated_process_count,
                 }
             end
         end
@@ -441,6 +477,8 @@ function M.activate(game_id, profile_id, profile_is_last_active)
                     isVortexRunningAfter = false,
                     profileActivationRequested = true,
                     readinessAvailable = true,
+                    vortexRestartRequested = restart_requested,
+                    vortexProcessesTerminated = terminated_process_count,
                 }
             )
         end
@@ -459,6 +497,8 @@ function M.activate(game_id, profile_id, profile_is_last_active)
                 windows.is_process_running(PROCESS_NAME),
             profileActivationRequested = true,
             readinessAvailable = true,
+            vortexRestartRequested = restart_requested,
+            vortexProcessesTerminated = terminated_process_count,
             warning =
                 "Vortex may still finish the requested profile change. " ..
                 "Check Vortex before continuing the Steam launch.",

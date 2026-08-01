@@ -91,6 +91,8 @@ export interface VortexActivationResult {
 	profileActivationConfirmed: boolean;
 	deploymentConfirmed: boolean;
 	readinessAvailable?: boolean;
+	vortexRestartRequested?: boolean;
+	vortexProcessesTerminated?: number;
 	readinessSignal:
 		| 'vortex-log-profile-switch'
 		| 'vortex-log-profile-already-active';
@@ -362,6 +364,8 @@ export function parseVortexActivationResult(value: unknown): VortexActivationRes
 		profileActivationConfirmed: record.profileActivationConfirmed as boolean,
 		deploymentConfirmed: record.deploymentConfirmed as boolean,
 		readinessAvailable: optionalBoolean(record, 'readinessAvailable', label),
+		vortexRestartRequested: optionalBoolean(record, 'vortexRestartRequested', label),
+		vortexProcessesTerminated: optionalNumber(record, 'vortexProcessesTerminated', label),
 		readinessSignal: record.readinessSignal,
 		error: optionalString(record, 'error', label),
 		warning: optionalString(record, 'warning', label),

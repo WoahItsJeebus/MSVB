@@ -6,6 +6,9 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 
 ### Fixed
 
+- Added a Retry action to Vortex activation failures that force-closes every
+  running Vortex instance, verifies shutdown, and repeats the held profile
+  activation without requiring Steam to restart.
 - Aligned the widened Vortex detection action with Clear Override by offsetting
   its full 32-pixel horizontal-padding expansion.
 - Added consistent horizontal padding to the Vortex detection and read-only

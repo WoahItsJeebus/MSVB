@@ -5,6 +5,7 @@ import { STEAM_MODAL_CLASS_NAME, SteamModalChromeStyles } from './SteamModalChro
 export interface ActivationErrorModalProps {
 	message: string;
 	warning?: string;
+	onRetry?: () => void;
 	onContinueWithSteam(): void;
 	onCancel(): void;
 }
@@ -12,6 +13,7 @@ export interface ActivationErrorModalProps {
 export function ActivationErrorModal({
 	message,
 	warning,
+	onRetry,
 	onContinueWithSteam,
 	onCancel,
 }: ActivationErrorModalProps) {
@@ -24,17 +26,27 @@ export function ActivationErrorModal({
 					<SteamModalChromeStyles />
 					<div>{message}</div>
 					{warning === undefined ? null : <div>{warning}</div>}
+					{onRetry === undefined ? null : (
+						<div>
+							Retry closes all running Vortex processes, then starts Vortex again with
+							the same profile.
+						</div>
+					)}
 					<div>
 						Continuing with Steam resumes the exact intercepted request without asking Vortex
 						to make another change.
 					</div>
 				</div>
 			}
-			strOKButtonText="Continue launching with Steam..."
+			strOKButtonText={onRetry === undefined ? 'Continue launching with Steam...' : 'Retry'}
+			strMiddleButtonText={
+				onRetry === undefined ? undefined : 'Continue launching with Steam...'
+			}
 			strCancelButtonText="Cancel"
 			bDisableBackgroundDismiss
-			closeModal={onCancel}
-			onOK={onContinueWithSteam}
+			closeModal={() => undefined}
+			onOK={onRetry ?? onContinueWithSteam}
+			onMiddleButton={onRetry === undefined ? undefined : onContinueWithSteam}
 			onCancel={onCancel}
 			onEscKeypress={onCancel}
 		/>
