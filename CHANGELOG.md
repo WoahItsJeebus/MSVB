@@ -97,7 +97,7 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Continuing through Steam does not undeploy Vortex-managed files and therefore does not guarantee an unmodded launch.
 - Only verified direct Steam launch sources are intercepted; unsupported and ambiguous routes pass through unchanged.
 
-[Unreleased]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.4...HEAD
+[1.0.5]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v1.0.4
 [0.7.14]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.13...v0.7.14
 [0.7.13]: https://github.com/WoahItsJeebus/MSVB/releases/tag/v0.7.13
