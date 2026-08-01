@@ -18,7 +18,7 @@ import { VortexProbePanel } from './vortex/VortexProbePanel';
 import { warmVortexStateCache } from './vortex/VortexClient';
 
 const PLUGIN_NAME = 'Vortex Launch Bridge';
-const PLUGIN_VERSION = '1.0.4';
+const PLUGIN_VERSION = '1.0.5';
 const VORTEX_CACHE_REFRESH_INTERVAL_MS = 5 * 60 * 1_000;
 
 let activeLoadId = 0;

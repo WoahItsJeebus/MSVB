@@ -40,21 +40,21 @@ if ([string]$pluginManifest.name -ne $pluginDirectoryName) {
     )
 }
 
-$pnpm = Get-Command 'pnpm' -ErrorAction SilentlyContinue
-if (-not $pnpm) {
-    throw 'pnpm was not found on PATH. Install the version pinned in package.json.'
+$corepack = Get-Command 'corepack' -ErrorAction SilentlyContinue
+if (-not $corepack) {
+    throw 'Corepack was not found on PATH. Install the Node version required by package.json.'
 }
 
 $previousCi = $env:CI
 $env:CI = 'true'
 Push-Location $repositoryRoot
 try {
-    & $pnpm.Source install --frozen-lockfile
+    & $corepack.Source pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) {
         throw "Dependency installation failed with exit code $LASTEXITCODE."
     }
 
-    & $pnpm.Source run build
+    & $corepack.Source pnpm run build
     if ($LASTEXITCODE -ne 0) {
         throw "Production build failed with exit code $LASTEXITCODE."
     }

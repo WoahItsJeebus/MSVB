@@ -5,7 +5,9 @@ node_modules/
 # Generated builds, tests, and release artifacts
 .millennium/
 dist/
-artifacts/
+artifacts/*
+!artifacts/changelog/
+!artifacts/changelog/*.txt
 coverage/
 *.tsbuildinfo
 

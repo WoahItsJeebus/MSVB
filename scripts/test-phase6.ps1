@@ -26,11 +26,17 @@ try {
 	$frontendIndexSource = Get-Content -LiteralPath 'frontend\index.tsx' -Raw
 	$readmeSource = Get-Content -LiteralPath 'README.md' -Raw
 	$changelogSource = Get-Content -LiteralPath 'CHANGELOG.md' -Raw
+	$installerCoreSource = Get-Content -LiteralPath 'installer\InstallerCore.cs' -Raw
+	$installerAssemblySource = Get-Content -LiteralPath 'installer\AssemblyInfo.cs' -Raw
+	$installerManifestSource = Get-Content -LiteralPath 'installer\app.manifest' -Raw
 	if ($manifestVersion -ne $packageVersion -or
 		$backendMain -notmatch "PLUGIN_VERSION\s*=\s*`"$escapedVersion`"" -or
 		$frontendIndexSource -notmatch "const PLUGIN_VERSION\s*=\s*'$escapedVersion'" -or
 		$readmeSource -notmatch "version-$escapedVersion-" -or
-		$changelogSource -notmatch "(?m)^## \[$escapedVersion\]") {
+		$changelogSource -notmatch "(?m)^## (?:\[)?$escapedVersion(?:\])? - " -or
+		$installerCoreSource -notmatch "InstallerVersion\s*=\s*`"$escapedVersion`"" -or
+		$installerAssemblySource -notmatch "AssemblyVersion\(`"$escapedVersion\.0`"\)" -or
+		$installerManifestSource -notmatch "assemblyIdentity version=`"$escapedVersion\.0`"") {
 		throw "Current version references must match package.json version $packageVersion."
 	}
 	if ($backendMain -notmatch 'pcall\(jit\.off\)') {

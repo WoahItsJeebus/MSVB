@@ -10,6 +10,8 @@ This checklist prepares a commit for the Steam Client Homebrew Plugin Database. 
 - [ ] Confirm the repository has no credentials, personal paths, local logs, generated test output, or `node_modules`.
 - [ ] Review README installation, limitation, troubleshooting, and privacy language.
 - [ ] Update `CHANGELOG.md`.
+- [ ] Add the matching Nexus changelog at
+      `artifacts/changelog/<version>.txt`, with one unhyphenated entry per line.
 
 ## 2. Synchronize the version
 
@@ -19,6 +21,11 @@ Set the same semantic version in:
 - `plugin.json`
 - `frontend/index.tsx`
 - `backend/main.lua`
+- `installer/InstallerCore.cs`
+- `installer/AssemblyInfo.cs`
+- `installer/app.manifest`
+- the README version badge
+- the matching `CHANGELOG.md` heading
 
 Create the release commit before selecting the Plugin Database submodule revision.
 

@@ -15,7 +15,7 @@ namespace VortexLaunchBridge.Installer
         public const string RepositoryName = "MSVB";
         public const string RepositoryBranch = "main";
         public const string RepositoryUrl = "https://github.com/WoahItsJeebus/MSVB";
-        public const string InstallerVersion = "1.0.4";
+        public const string InstallerVersion = "1.0.5";
     }
 
     internal sealed class ResolvedInstallPaths
