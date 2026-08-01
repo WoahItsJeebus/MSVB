@@ -7,7 +7,7 @@
 
 # Vortex Launch Bridge
 
-[![Version](https://img.shields.io/badge/version-1.0.5-2ea3f2)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.6-2ea3f2)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
 [![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -17,7 +17,7 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 ## Features
 
 - Detects Vortex and reads its supported game/profile state without editing it.
-- Warms a background cache at plugin startup so eligible launch prompts appear without a long lookup delay.
+- Warms a background cache at startup and safely refreshes Vortex profile state on every supported Steam PLAY request.
 - Uses the game's Steam name and profile count in a native, theme-aware Steam confirmation dialog.
 - Activates a selected Vortex profile in Vortex's minimized background mode and waits for deployment confirmation before starting the configured target.
 - Preserves the exact intercepted Steam launch request when you choose **Continue launching with Steam...**
@@ -35,7 +35,7 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 - [Millennium](https://docs.steambrew.app/users/installing)
 - [Vortex](https://www.nexusmods.com/about/vortex/)
 
-The current release has been tested with Millennium 3.3.1 and Vortex 2.3.0.
+The current local validation environment uses Millennium 3.3.1 and Vortex 2.4.2.
 
 ## Installation
 
@@ -109,7 +109,17 @@ Vortex Launch Bridge scans Vortex's read-only state in the background when Steam
 - **Continue launching with Steam...** replays the exact Steam request without changing Vortex state.
 - **Cancel** abandons the intercepted request.
 
-For the most reliable profile activation with Vortex 2.3.0, close Vortex before choosing **Launch with Vortex**. Vortex currently applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
+With Vortex closed, each supported PLAY request performs a fresh read-only
+profile query before the prompt is built, so newly added profiles appear
+without restarting Steam. If Vortex is already running, the bridge retains its
+last safe snapshot because Vortex does not reliably service that startup query
+as a second instance.
+
+Only one launch flow is kept at a time. Pressing PLAY again immediately closes
+and cancels the older prompt or pending check, then handles the newest request;
+there is no post-cancel cooldown.
+
+For the most reliable profile activation, close Vortex before choosing **Launch with Vortex**. Vortex applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
 
 If activation times out, **Retry** force-closes all running Vortex instances and
 repeats the same held profile activation as a cold start. Steam remains held

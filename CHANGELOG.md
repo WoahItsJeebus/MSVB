@@ -2,6 +2,17 @@
 
 All notable changes to Vortex Launch Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/).
 
+## 1.0.6 - 2026-08-01
+
+### Fixed
+
+- Refreshed Vortex's read-only game and profile snapshot on every supported
+  Steam PLAY request, allowing profiles added since Steam startup to appear as
+  soon as Vortex is closed and its safe state query can run.
+- Removed the five-second post-cancel launch suppression and made every newer
+  supported launch request immediately close and supersede the older pending
+  prompt or lookup.
+
 ## 1.0.5 - 2026-07-31
 
 ### Fixed

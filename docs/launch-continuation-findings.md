@@ -66,8 +66,8 @@ Interception is never disabled globally while a request is replayed.
 ```text
 RunGame(_2ftLibraryDetails)
   -> validate and capture exact tuple
-  -> suppress an identical pending duplicate
-  -> check Phase 3 Vortex match
+  -> cancel and close any older pending supported request
+  -> refresh Vortex state and check Phase 3 match
      -> error or timeout: replay once, suspend interception for this session
      -> no match: replay once
      -> match with zero profiles: replay once
@@ -105,7 +105,7 @@ Each pending request records:
 - exact `RunGame` tuple;
 - capture time;
 - state;
-- duplicate count.
+- count of older pending requests superseded by this flow.
 
 Phase 4 states are:
 
@@ -120,10 +120,9 @@ failed
 
 Only one request is held at a time:
 
-- an identical request while checking or prompting is suppressed and counted;
-- a same-AppID request with changed optional fields is also correlated and suppressed while that AppID is pending;
-- a different request while one is pending passes through unchanged;
-- any same-AppID Steam retry after a recently dismissed request is suppressed for five seconds;
+- every newer supported request cancels and closes the older pending flow, whether its AppID or signature matches;
+- a replacement begins immediately and carries forward the number of flows it superseded;
+- cancelling or closing a prompt creates no cooldown before another PLAY request;
 - a modal cannot be created after its pending request has settled;
 - asynchronous matching completion is ignored after unload;
 - unload closes any modal and replays each still-held request once before unpatching.
@@ -136,7 +135,7 @@ Phase 1 callback observers remain registered and unregisterable. Its older `RunG
 - a Steam continuation becomes observable when its bypass reaches the original;
 - a request cancelled before the original call does not produce the old `RunGame` observation.
 
-Phase 4 adds dedicated structured events for interception, bypass consumption, continuation, modal display, duplicate suppression, cancellation, suspension, and cleanup.
+Phase 4 adds dedicated structured events for interception, bypass consumption, continuation, modal display, pending-flow supersession, cancellation, suspension, and cleanup.
 
 ## Automated checks
 
@@ -170,13 +169,14 @@ Use a short, harmless installed game and collect `[VLB]` records.
 5. Repeat, then close the modal with its close icon. Confirm the game does not start.
 6. Repeat, then press Escape. Confirm the game does not start.
 7. Repeat, then select **Launch with Vortex**. Confirm the held Steam request is cancelled and no Vortex activation occurs in Phase 4.
-8. Rapidly click Play twice. Confirm one modal and a `launch.pending_duplicate_suppressed` event.
-9. While a modal is open, launch a different game. Confirm the second request passes through and the first modal remains.
-10. While matching or prompting, disable the plugin. Confirm the held request is replayed once and all hooks unregister.
-11. Test each unsupported route from the Phase 1 matrix. Confirm no Phase 4 modal is shown unless its live trace proves it is the exact supported source.
-12. Simulate a backend failure. Confirm the current request continues and later requests pass through for that session.
+8. Rapidly click Play twice. Confirm the older pending flow is cancelled, one replacement modal remains, and a `launch.pending_superseded` event appears.
+9. Cancel or close a modal and immediately press Play again. Confirm a new prompt can appear with no suppression delay.
+10. While a modal is open, launch a different supported game. Confirm the first modal closes and only the second request remains pending.
+11. While matching or prompting, disable the plugin. Confirm the held request is replayed once and all hooks unregister.
+12. Test each unsupported route from the Phase 1 matrix. Confirm no Phase 4 modal is shown unless its live trace proves it is the exact supported source.
+13. Simulate a backend failure. Confirm the current request continues and later requests pass through for that session.
 
-Do not mark the Library Details route runtime-confirmed until steps 1–12 have been performed against the installed Steam client.
+Do not mark the Library Details route runtime-confirmed until steps 1–13 have been performed against the installed Steam client.
 
 ## Phase boundary
 

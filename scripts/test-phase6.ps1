@@ -147,6 +147,10 @@ try {
 		$backendMain -notmatch 'vortex_state_cache\.get\(\)') {
 		throw 'Backend must warm and consume the read-only Vortex state cache.'
 	}
+	if ($backendMain -notmatch
+		'(?s)function\s+match_vortex_game\(request_json\).*?local\s+state_before_refresh\s*=\s*vortex_state_cache\.get\(\).*?local\s+refresh_result\s*=\s*vortex_state_cache\.refresh\(\).*?local\s+state,\s*cache_metadata\s*=\s*vortex_state_cache\.get\(\)') {
+		throw 'Every launch-time game match must refresh Vortex state before using the cache.'
+	}
 
 	$launchInterceptor = Get-Content -LiteralPath 'frontend\launch\LaunchInterceptor.tsx' -Raw
 	if ($launchInterceptor -notmatch 'return\s+showModal\(modal,\s*window,\s*props\)') {
@@ -154,6 +158,11 @@ try {
 	}
 	if ([regex]::Matches($launchInterceptor, '\bshowModal\(').Count -ne 1) {
 		throw 'Launch modal call sites must use the guarded desktop modal helper.'
+	}
+	if ($launchInterceptor -match 'CANCELLED_RETRY_WINDOW_MS|recentlyCancelledByApp|launch\.pending_duplicate_suppressed' -or
+		$launchInterceptor -notmatch 'launch\.pending_superseded' -or
+		$launchInterceptor -notmatch "cancelPending\(activePending,\s*'superseded-by-new-launch'\)") {
+		throw 'New launch attempts must immediately supersede the prior pending flow without a cooldown.'
 	}
 
 	$launchChoiceModal = Get-Content -LiteralPath 'frontend\ui\LaunchChoiceModal.tsx' -Raw

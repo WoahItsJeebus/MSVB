@@ -402,7 +402,7 @@ function M.activate(
         }
     end
 
-    -- Vortex 2.3.0's cold-start --profile handler races its interrupted-switch
+    -- Vortex's cold-start --profile handler can race its interrupted-switch
     -- recovery and can immediately restore the old active profile. When the
     -- requested profile is already this game's last-active profile, --game
     -- reaches the same target after startup recovery has completed.

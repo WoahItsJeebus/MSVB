@@ -5,7 +5,7 @@ Vortex Launch Bridge is a Millennium plugin with a TypeScript/React frontend and
 ## Runtime flow
 
 1. The backend starts with LuaJIT disabled and verifies its local process bridge.
-2. The frontend warms a read-only Vortex state cache and refreshes it periodically.
+2. The frontend warms a read-only Vortex state cache, refreshes it periodically, and requests a fresh safe snapshot for every supported PLAY decision.
 3. The launch interceptor observes supported direct `SteamClient.Apps.RunGame` sources.
 4. A request passes through unchanged unless its AppID can be matched to a Vortex game with at least one valid profile.
 5. An eligible request is preserved as a typed tuple and the Steam-themed decision modal opens.
@@ -30,7 +30,7 @@ Vortex Launch Bridge is a Millennium plugin with a TypeScript/React frontend and
 
 ### Steam launch interception
 
-Only verified direct `RunGame` sources are eligible. Unknown, automatic, remote-streaming, lobby, recovery, and otherwise ambiguous sources pass through. Eligibility failures also pass through before the original call is withheld.
+Only verified direct `RunGame` sources are eligible. Unknown, automatic, remote-streaming, lobby, recovery, and otherwise ambiguous sources pass through. Eligibility failures also pass through before the original call is withheld. At most one supported launch flow is pending: a newer request cancels and closes the older flow immediately, and there is no post-cancel suppression window.
 
 The Steam continuation path replays the original typed tuple once. Its bypass token is bound to the full request signature, expires quickly, and is revoked if replay throws.
 
@@ -38,7 +38,7 @@ The Steam continuation path replays the original typed tuple once. Its bypass to
 
 Discovery and matching use read-only Vortex state. The plugin never uses Vortex state mutation operations and never edits profile or deployment files directly.
 
-Vortex 2.3.0 only applies profile-selection arguments reliably during a cold start. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success when an already-running Vortex instance ignores the request. Activation retry force-terminates exact-name `Vortex.exe` processes, verifies that none remain, and only then repeats the held activation.
+Vortex applies profile-selection arguments reliably during a cold start but may ignore them when forwarding to an existing instance. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success from process state alone. Activation retry force-terminates exact-name `Vortex.exe` processes, verifies that none remain, and only then repeats the held activation.
 
 ### Process execution
 
