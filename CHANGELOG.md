@@ -2,7 +2,7 @@
 
 All notable changes to Vortex Launch Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.5] - 2026-07-31
+## 1.0.5 - 2026-07-31
 
 ### Fixed
 
@@ -60,20 +60,20 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
   administrator check and hid the direct executable, eliminating the remaining
   `cmd.exe` console race before its renderer initialized.
 
-## [1.0.4] - 2026-07-25
+## 1.0.4 - 2026-07-25
 
 ### Fixed
 
 - Applied Windows `CREATE_NO_WINDOW` semantics to the bridge's registry and process-state runner, eliminating the remaining PowerShell console flashes during Steam startup and periodic cache refreshes.
 
-## [0.7.14] - 2026-07-23
+## 0.7.14 - 2026-07-23
 
 ### Fixed
 
 - Isolated captured Vortex CLI process trees on a private hidden Windows desktop, preventing console-based Vortex helpers from flashing terminal windows during startup and five-minute cache refreshes.
 - Added regression coverage that verifies captured process trees actually inherit the private desktop.
 
-## [0.7.13] - 2026-07-23
+## 0.7.13 - 2026-07-23
 
 ### Added
 
@@ -96,8 +96,3 @@ All notable changes to Vortex Launch Bridge are documented here. The format is b
 - Vortex 2.3.0 may ignore profile-selection arguments when it is already running. A cold Vortex start is required for confirmed activation.
 - Continuing through Steam does not undeploy Vortex-managed files and therefore does not guarantee an unmodded launch.
 - Only verified direct Steam launch sources are intercepted; unsupported and ambiguous routes pass through unchanged.
-
-[1.0.5]: https://github.com/WoahItsJeebus/MSVB/compare/v1.0.4...v1.0.5
-[1.0.4]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.14...v1.0.4
-[0.7.14]: https://github.com/WoahItsJeebus/MSVB/compare/v0.7.13...v0.7.14
-[0.7.13]: https://github.com/WoahItsJeebus/MSVB/releases/tag/v0.7.13
