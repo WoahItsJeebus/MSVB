@@ -7,7 +7,7 @@
 
 # Vortex Launch Bridge
 
-[![Version](https://img.shields.io/badge/version-1.0.6-2ea3f2)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.7-2ea3f2)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
 [![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -20,6 +20,8 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 - Warms a background cache at startup and safely refreshes Vortex profile state on every supported Steam PLAY request.
 - Uses the game's Steam name and profile count in a native, theme-aware Steam confirmation dialog.
 - Activates a selected Vortex profile in Vortex's minimized background mode and waits for deployment confirmation before starting the configured target.
+- Includes an explicit, backup-verified compatibility repair for Vortex child
+  processes that otherwise create visible console windows.
 - Preserves the exact intercepted Steam launch request when you choose **Continue launching with Steam...**
 - Supports optional remembered choices, preferred profiles, custom executables, custom arguments, and exact Steam AppID-to-Vortex game mappings.
 - Fails open before interception whenever eligibility cannot be established safely.
@@ -162,10 +164,11 @@ Settings are stored locally at:
 
 ### A terminal flashes while Vortex starts
 
-Vortex 2.3.0 starts its bundled console-subsystem `.NET` probe, its
-`fsutil dirty query` administrator check, and some shell-backed startup tools
-without Node's `windowsHide` option. With Vortex fully exited, run the guarded
-compatibility repair from an administrator PowerShell:
+Vortex 2.3.0 through 2.4.2 starts its bundled console-subsystem `.NET` probe,
+its `fsutil dirty query` administrator check, and some shell-backed startup
+tools without Node's `windowsHide` option. The 1.0.7 release ZIP and installed
+plugin both include the guarded compatibility repair. With Vortex fully exited,
+run it from an administrator PowerShell opened in the plugin directory:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\patch-vortex-dotnetprobe.ps1
@@ -209,9 +212,10 @@ The plugin does not:
 - remove deployed mods when continuing through Steam;
 - send telemetry or settings over the network.
 
-The optional terminal-flash compatibility script changes Vortex's `app.asar`
-renderer only when the user explicitly runs it and always retains the complete
-original archive in the local backup directory above.
+The optional terminal-flash compatibility script changes only the exact guarded
+child-process entries in Vortex's `app.asar` when the user explicitly runs it
+and always retains the complete original archive in the local backup directory
+above.
 
 Process launches avoid a command shell, custom arguments use bounded parsing, settings are validated before use, and asynchronous work is bounded by explicit timeouts. See [Architecture](docs/architecture.md) for the design and trust boundaries.
 

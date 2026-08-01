@@ -52,6 +52,15 @@ if (Get-Process -Name Vortex -ErrorAction SilentlyContinue) {
 }
 
 $resolvedAsar = [System.IO.Path]::GetFullPath($AsarPath)
+$vortexRoot = Split-Path -Parent (Split-Path -Parent $resolvedAsar)
+$vortexExecutable = Join-Path $vortexRoot 'Vortex.exe'
+$vortexVersion =
+	if (Test-Path -LiteralPath $vortexExecutable -PathType Leaf) {
+		(Get-Item -LiteralPath $vortexExecutable).VersionInfo.ProductVersion
+	}
+	else {
+		'unknown'
+	}
 $archive = [System.IO.File]::Open(
 	$resolvedAsar,
 	[System.IO.FileMode]::Open,
@@ -410,6 +419,7 @@ if (-not $rendererChanged -and -not $adminCheckChanged) {
 	[pscustomobject]@{
 		changed = $false
 		asarPath = $resolvedAsar
+		vortexVersion = $vortexVersion
 		backupPath = $null
 		rendererPatched = $true
 		dotnetProbePatched = $true
@@ -583,6 +593,7 @@ catch {
 [pscustomobject]@{
 	changed = $true
 	asarPath = $resolvedAsar
+	vortexVersion = $vortexVersion
 	backupPath = $resolvedBackup
 	rendererPatched = $true
 	dotnetProbePatched = $true

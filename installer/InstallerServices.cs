@@ -386,7 +386,8 @@ namespace VortexLaunchBridge.Installer
                 "pnpm-lock.yaml",
                 Path.Combine("frontend", "index.tsx"),
                 Path.Combine("backend", "main.lua"),
-                Path.Combine("backend", "util", "process_shell.exe")
+                Path.Combine("backend", "util", "process_shell.exe"),
+                Path.Combine("scripts", "patch-vortex-dotnetprobe.ps1")
             };
 
             foreach (string relativePath in requiredFiles)
@@ -872,6 +873,12 @@ namespace VortexLaunchBridge.Installer
             }
 
             CopyRequiredDirectory(sourceDirectory, packageDirectory, "backend");
+            string scriptsDirectory = Path.Combine(packageDirectory, "scripts");
+            Directory.CreateDirectory(scriptsDirectory);
+            File.Copy(
+                Path.Combine(sourceDirectory, "scripts", "patch-vortex-dotnetprobe.ps1"),
+                Path.Combine(scriptsDirectory, "patch-vortex-dotnetprobe.ps1"),
+                false);
             CopyRequiredDirectory(
                 sourceDirectory,
                 packageDirectory,
@@ -907,7 +914,8 @@ namespace VortexLaunchBridge.Installer
                 Path.Combine(".millennium", "Dist", "index.js"),
                 Path.Combine(".millennium", "Dist", "webkit.js"),
                 Path.Combine("backend", "main.lua"),
-                Path.Combine("backend", "util", "process_shell.exe")
+                Path.Combine("backend", "util", "process_shell.exe"),
+                Path.Combine("scripts", "patch-vortex-dotnetprobe.ps1")
             };
 
             foreach (string relativePath in requiredFiles)

@@ -2,6 +2,18 @@
 
 All notable changes to Vortex Launch Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/).
 
+## 1.0.7 - 2026-08-01
+
+### Fixed
+
+- Identified Vortex 2.4.2's restored unhidden administrator check, `.NET`
+  probe, and shared executable-spawn paths, then validated the guarded
+  compatibility repair against its current `app.asar` layout and integrity
+  metadata.
+- Included the terminal-flash repair script in both the release ZIP and the
+  installed plugin so the hidden-child repair remains available after an
+  install or Vortex update.
+
 ## 1.0.6 - 2026-08-01
 
 ### Fixed

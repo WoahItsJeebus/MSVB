@@ -76,6 +76,7 @@ $requiredFiles = @(
     'CHANGELOG.md',
     'backend\main.lua',
     'backend\util\process_shell.exe',
+    'scripts\patch-vortex-dotnetprobe.ps1',
     '.millennium\Dist\index.js',
     '.millennium\Dist\webkit.js'
 )
@@ -128,6 +129,12 @@ try {
         Join-Path $repositoryRoot 'backend'
     ) -Destination $packageRoot -Recurse
 
+    $scriptsRoot = Join-Path $packageRoot 'scripts'
+    New-Item -ItemType Directory -Path $scriptsRoot | Out-Null
+    Copy-Item -LiteralPath (
+        Join-Path $repositoryRoot 'scripts\patch-vortex-dotnetprobe.ps1'
+    ) -Destination $scriptsRoot
+
     $millenniumRoot = Join-Path $packageRoot '.millennium'
     New-Item -ItemType Directory -Path $millenniumRoot | Out-Null
     Copy-Item -LiteralPath (
@@ -156,6 +163,7 @@ try {
             "$pluginDirectoryName/plugin.json",
             "$pluginDirectoryName/backend/main.lua",
             "$pluginDirectoryName/backend/util/process_shell.exe",
+            "$pluginDirectoryName/scripts/patch-vortex-dotnetprobe.ps1",
             "$pluginDirectoryName/.millennium/Dist/index.js",
             "$pluginDirectoryName/.millennium/Dist/webkit.js"
         )

@@ -32,9 +32,9 @@ The installed Vortex 2.3.0 renderer consumes a cold-start `--profile` by selecti
 skips its splash screen and hides its BrowserWindow after initialization while
 profile synchronization and deployment continue in the renderer.
 
-## Vortex 2.3.0 console children
+## Vortex 2.3.0 through 2.4.2 console children
 
-The installed renderer checks the `.NET` desktop runtime with
+The Vortex 2.3.0 and 2.4.2 renderers both check the `.NET` desktop runtime with
 `child_process.execFile(dotnetprobe.exe, args)` and omits the supported
 `windowsHide` option. Because the bundled probe is a Windows Console-subsystem
 executable, Windows allocates a briefly visible `conhost.exe` roughly four
@@ -54,8 +54,10 @@ JavaScript replacements so archive offsets remain unchanged, updates the
 affected file integrity hashes, and leaves the signed probe untouched. Windows
 may still create short-lived console-host processes, but Node starts them
 hidden. A high-frequency cold activation trace must show no visible console
-window. Vortex updates can restore the official files, so the repair remains
-explicit and repeatable rather than modifying Vortex automatically.
+window. The repair was validated on a disposable copy of the installed Vortex
+2.4.2 archive without modifying the live installation. Vortex updates can
+restore the official files, so the repair remains explicit and repeatable
+rather than modifying Vortex automatically.
 
 ## Readiness contract
 

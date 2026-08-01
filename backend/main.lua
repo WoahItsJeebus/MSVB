@@ -18,7 +18,7 @@ local json_decode = require("util.json_decode")
 local json_encode = require("util.json_encode")
 local windows = require("util.windows")
 
-local PLUGIN_VERSION = "1.0.6"
+local PLUGIN_VERSION = "1.0.7"
 local backend_started_at = os.time()
 local MAXIMUM_RPC_REQUEST_BYTES = 128 * 1024
 local vortex_state_cache = vortex_state_cache_module.new(
