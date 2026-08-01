@@ -166,9 +166,16 @@ Settings are stored locally at:
 
 Vortex 2.3.0 through 2.4.2 starts its bundled console-subsystem `.NET` probe,
 its `fsutil dirty query` administrator check, and some shell-backed startup
-tools without Node's `windowsHide` option. The 1.0.7 release ZIP and installed
-plugin both include the guarded compatibility repair. With Vortex fully exited,
-run it from an administrator PowerShell opened in the plugin directory:
+tools without Node's `windowsHide` option. Version 1.0.7 handles this
+automatically: a cold Vortex process remains suspended until a scoped startup
+watcher is ready, and only console windows belonging to descendants of that
+specific Vortex process are hidden. The watcher exits after 30 seconds, does
+not require administrator access, and does not modify Vortex.
+
+The release ZIP and installed plugin also include an optional compatibility
+repair. If a Vortex update introduces a console path outside that startup
+window, fully exit Vortex and run the repair from an administrator PowerShell
+opened in the plugin directory:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\patch-vortex-dotnetprobe.ps1
@@ -180,8 +187,8 @@ hash-verified archive backup under
 `%LOCALAPPDATA%\VortexLaunchBridge\Backups`, inserts the missing option without
 changing any file size, updates the corresponding integrity hashes, and
 verifies the result. Vortex's signed probe remains untouched. A later Vortex
-update may restore the official files; rerun the repair only if the flash
-returns.
+update may restore the official files; rerun this optional repair only if the
+automatic guard does not cover a later child launch.
 
 ### Logs
 
@@ -216,6 +223,11 @@ The optional terminal-flash compatibility script changes only the exact guarded
 child-process entries in Vortex's `app.asar` when the user explicitly runs it
 and always retains the complete original archive in the local backup directory
 above.
+
+During a cold Vortex activation, the bridge briefly observes top-level window
+creation and visibility events. It acts only on console-class windows whose
+process ancestry reaches the exact Vortex process it just launched, and the
+watcher terminates after 30 seconds.
 
 Process launches avoid a command shell, custom arguments use bounded parsing, settings are validated before use, and asynchronous work is bounded by explicit timeouts. See [Architecture](docs/architecture.md) for the design and trust boundaries.
 

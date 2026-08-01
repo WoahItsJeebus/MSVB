@@ -503,10 +503,20 @@ local function direct_process_shell_request(command_parts, purpose)
     return response
 end
 
-local function detached_process_request(executable, arguments, create_hidden_console)
+local function detached_process_request(
+    executable,
+    arguments,
+    create_hidden_console,
+    guard_vortex_console_windows
+)
+    local launch_mode = "--vlb-detach"
+    if guard_vortex_console_windows == true then
+        launch_mode = "--vlb-detach-vortex-guarded"
+    elseif create_hidden_console == true then
+        launch_mode = "--vlb-detach-hidden-console"
+    end
     local command_parts = {
-        create_hidden_console == true and
-            "--vlb-detach-hidden-console" or "--vlb-detach",
+        launch_mode,
         quote_windows_argument(executable),
     }
     for _, argument in ipairs(arguments) do
@@ -1093,7 +1103,8 @@ end
 local function start_detached_process(
     executable,
     arguments,
-    create_hidden_console
+    create_hidden_console,
+    guard_vortex_console_windows
 )
     arguments = arguments or {}
     if type(executable) ~= "string" or executable == "" then
@@ -1115,7 +1126,8 @@ local function start_detached_process(
         detached_process_request(
             executable,
             arguments,
-            create_hidden_console
+            create_hidden_console,
+            guard_vortex_console_windows
         )
     if response == nil then
         return {
@@ -1127,11 +1139,15 @@ local function start_detached_process(
 end
 
 function M.start_process(executable, arguments)
-    return start_detached_process(executable, arguments, false)
+    return start_detached_process(executable, arguments, false, false)
 end
 
 function M.start_process_with_hidden_console(executable, arguments)
-    return start_detached_process(executable, arguments, true)
+    return start_detached_process(executable, arguments, true, false)
+end
+
+function M.start_vortex_process(executable, arguments)
+    return start_detached_process(executable, arguments, false, true)
 end
 
 function M.monotonic_milliseconds()

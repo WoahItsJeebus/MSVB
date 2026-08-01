@@ -227,6 +227,34 @@ try {
 			throw 'The native hidden-console launcher exposed a window.'
 		}
 
+		$guardedVortex = Join-Path $testRoot 'Vortex.exe'
+		Copy-Item -LiteralPath $powershell -Destination $guardedVortex
+		$guardedVortexCommand =
+			'--vlb-detach-vortex-guarded "' + $guardedVortex + '"' +
+			' -NoProfile -NonInteractive -Command Start-Sleep -Seconds 4'
+		$guardedVortexStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
+		$guardedVortexJson = (
+			& lua `
+				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `
+				$guardedVortexCommand `
+				'consoleWindowGuarded' `
+				'emit'
+		) -join "`n"
+		$guardedVortexStartedAt.Stop()
+		if ($LASTEXITCODE -ne 0) {
+			throw 'The guarded Vortex process-shell test failed.'
+		}
+		$guardedVortexResult = $guardedVortexJson | ConvertFrom-Json
+		$guardedVortexProcess =
+			Get-Process -Id $guardedVortexResult.processId -ErrorAction SilentlyContinue
+		if (-not $guardedVortexResult.started -or
+			-not $guardedVortexResult.consoleWindowGuarded -or
+			$guardedVortexStartedAt.ElapsedMilliseconds -ge 2000 -or
+			$null -eq $guardedVortexProcess -or
+			$guardedVortexProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+			throw 'The guarded Vortex launcher did not start safely in the background.'
+		}
+
 		$nativeProcessStateJson = (
 			& lua `
 				(Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\process_shell.lua') `

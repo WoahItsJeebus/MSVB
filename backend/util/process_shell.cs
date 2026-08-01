@@ -13,12 +13,29 @@ internal static class ProcessShell
     private const uint GenericAll = 0x10000000;
     private const uint CreateNewConsole = 0x00000010;
     private const uint DetachedProcess = 0x00000008;
+    private const uint CreateSuspended = 0x00000004;
     private const uint CreateUnicodeEnvironment = 0x00000400;
     private const uint CreateNoWindow = 0x08000000;
     private const uint Infinite = 0xFFFFFFFF;
+    private const uint WaitObject0 = 0x00000000;
+    private const uint EventModifyState = 0x0002;
+    private const uint Th32csSnapProcess = 0x00000002;
+    private const uint EventSystemForeground = 0x0003;
+    private const uint EventObjectCreate = 0x8000;
+    private const uint EventObjectShow = 0x8002;
+    private const uint WineventOutOfContext = 0x0000;
+    private const uint WineventSkipOwnProcess = 0x0002;
+    private const uint PmRemove = 0x0001;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpHideWindow = 0x0080;
+    private const int ObjidWindow = 0;
     private const uint StartfUseShowWindow = 0x00000001;
     private const uint StartfUseStdHandles = 0x00000100;
     private const short SwHide = 0;
+    private const int VortexConsoleGuardMilliseconds = 30000;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct StartupInfo
@@ -51,6 +68,63 @@ internal static class ProcessShell
         public int processId;
         public int threadId;
     }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry
+    {
+        public uint size;
+        public uint usage;
+        public uint processId;
+        public IntPtr defaultHeapId;
+        public uint moduleId;
+        public uint threads;
+        public uint parentProcessId;
+        public int basePriority;
+        public uint flags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string executableFile;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int x;
+        public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Message
+    {
+        public IntPtr window;
+        public uint message;
+        public UIntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public Point point;
+        public uint privateValue;
+    }
+
+    private sealed class ProcessTreeEntry
+    {
+        public int ParentProcessId;
+        public string ExecutableFile;
+    }
+
+    private delegate bool EnumWindowsCallback(IntPtr window, IntPtr parameter);
+    private delegate void WinEventCallback(
+        IntPtr hook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime
+    );
+
+    private static int guardedRootProcessId;
+    private static IntPtr guardedPreviousForegroundWindow;
+    private static WinEventCallback guardedWinEventCallback;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateDesktop(
@@ -93,6 +167,119 @@ internal static class ProcessShell
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateEvent(
+        IntPtr eventAttributes,
+        bool manualReset,
+        bool initialState,
+        string name
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenEvent(
+        uint desiredAccess,
+        bool inheritHandle,
+        string name
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetEvent(IntPtr handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint ResumeThread(IntPtr thread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(
+        uint flags,
+        uint processId
+    );
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Process32First(
+        IntPtr snapshot,
+        ref ProcessEntry entry
+    );
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Process32Next(
+        IntPtr snapshot,
+        ref ProcessEntry entry
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(
+        EnumWindowsCallback callback,
+        IntPtr parameter
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowThreadProcessId(
+        IntPtr window,
+        out uint processId
+    );
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(
+        IntPtr window,
+        StringBuilder className,
+        int maximum
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr window, int command);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr window,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags
+    );
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(
+        uint eventMinimum,
+        uint eventMaximum,
+        IntPtr eventHookModule,
+        WinEventCallback callback,
+        uint processId,
+        uint threadId,
+        uint flags
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern bool PeekMessage(
+        out Message message,
+        IntPtr window,
+        uint filterMinimum,
+        uint filterMaximum,
+        uint removeMessage
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref Message message);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref Message message);
 
     private static bool RequiresHiddenDesktop(string[] args)
     {
@@ -263,6 +450,489 @@ internal static class ProcessShell
             null,
             CreateNoWindow + CreateUnicodeEnvironment
         );
+    }
+
+    private static Dictionary<int, ProcessTreeEntry> CaptureProcessTree()
+    {
+        var processes = new Dictionary<int, ProcessTreeEntry>();
+        var snapshot = CreateToolhelp32Snapshot(Th32csSnapProcess, 0);
+        if (snapshot == IntPtr.Zero || snapshot.ToInt64() == -1)
+        {
+            return processes;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry();
+            entry.size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            if (!Process32First(snapshot, ref entry))
+            {
+                return processes;
+            }
+
+            do
+            {
+                processes[unchecked((int)entry.processId)] =
+                    new ProcessTreeEntry
+                    {
+                        ParentProcessId =
+                            unchecked((int)entry.parentProcessId),
+                        ExecutableFile = entry.executableFile ?? string.Empty,
+                    };
+                entry.size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            }
+            while (Process32Next(snapshot, ref entry));
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+
+        return processes;
+    }
+
+    private static bool IsDescendantProcess(
+        int processId,
+        int rootProcessId,
+        IDictionary<int, ProcessTreeEntry> processes
+    )
+    {
+        var current = processId;
+        var visited = new HashSet<int>();
+        for (var depth = 0; depth < 64; depth += 1)
+        {
+            if (current == rootProcessId)
+            {
+                return true;
+            }
+            if (current <= 0 || !visited.Add(current))
+            {
+                return false;
+            }
+
+            ProcessTreeEntry entry;
+            if (!processes.TryGetValue(current, out entry))
+            {
+                return false;
+            }
+            current = entry.ParentProcessId;
+        }
+        return false;
+    }
+
+    private static bool IsConsoleProcess(string executableFile)
+    {
+        return string.Equals(
+                executableFile,
+                "conhost.exe",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                executableFile,
+                "OpenConsole.exe",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                executableFile,
+                "cmd.exe",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                executableFile,
+                "powershell.exe",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                executableFile,
+                "pwsh.exe",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                executableFile,
+                "dotnetprobe.exe",
+                StringComparison.OrdinalIgnoreCase
+            );
+    }
+
+    private static void HideDescendantConsoleWindow(
+        IntPtr window,
+        IDictionary<int, ProcessTreeEntry> processes
+    )
+    {
+        if (window == IntPtr.Zero || guardedRootProcessId <= 0)
+        {
+            return;
+        }
+
+        uint rawProcessId;
+        GetWindowThreadProcessId(window, out rawProcessId);
+        var processId = unchecked((int)rawProcessId);
+        if (!IsDescendantProcess(
+            processId,
+            guardedRootProcessId,
+            processes
+        ))
+        {
+            return;
+        }
+
+        ProcessTreeEntry process;
+        processes.TryGetValue(processId, out process);
+        var className = new StringBuilder(256);
+        GetClassName(window, className, className.Capacity);
+        var classValue = className.ToString();
+        var isConsoleClass = string.Equals(
+                classValue,
+                "ConsoleWindowClass",
+                StringComparison.OrdinalIgnoreCase
+            ) ||
+            string.Equals(
+                classValue,
+                "CASCADIA_HOSTING_WINDOW_CLASS",
+                StringComparison.OrdinalIgnoreCase
+            );
+        if (!isConsoleClass &&
+            (process == null || !IsConsoleProcess(process.ExecutableFile)))
+        {
+            return;
+        }
+
+        var wasForeground = GetForegroundWindow() == window;
+        ShowWindowAsync(window, SwHide);
+        SetWindowPos(
+            window,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoSize + SwpNoMove + SwpNoZOrder +
+                SwpNoActivate + SwpHideWindow
+        );
+        if (wasForeground &&
+            guardedPreviousForegroundWindow != IntPtr.Zero &&
+            guardedPreviousForegroundWindow != window &&
+            IsWindow(guardedPreviousForegroundWindow))
+        {
+            SetForegroundWindow(guardedPreviousForegroundWindow);
+        }
+    }
+
+    private static void HideAllDescendantConsoleWindows()
+    {
+        var processes = CaptureProcessTree();
+        EnumWindows(delegate(IntPtr window, IntPtr parameter)
+        {
+            HideDescendantConsoleWindow(window, processes);
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    private static void HandleGuardedWindowEvent(
+        IntPtr hook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime
+    )
+    {
+        if (window == IntPtr.Zero ||
+            (eventType != EventSystemForeground &&
+                objectId != ObjidWindow))
+        {
+            return;
+        }
+        HideDescendantConsoleWindow(window, CaptureProcessTree());
+    }
+
+    private static bool IsProcessAlive(int processId)
+    {
+        try
+        {
+            using (var process = Process.GetProcessById(processId))
+            {
+                return !process.HasExited;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int RunConsoleWindowGuard(
+        int rootProcessId,
+        string readyEventName,
+        int durationMilliseconds
+    )
+    {
+        if (rootProcessId <= 0 ||
+            durationMilliseconds < 5000 ||
+            durationMilliseconds > 60000 ||
+            string.IsNullOrEmpty(readyEventName) ||
+            readyEventName.Length > 240 ||
+            !readyEventName.StartsWith(
+                @"Local\VortexLaunchBridge-ConsoleGuard-",
+                StringComparison.Ordinal
+            ))
+        {
+            return 87;
+        }
+
+        var readyEvent = OpenEvent(
+            EventModifyState,
+            false,
+            readyEventName
+        );
+        if (readyEvent == IntPtr.Zero)
+        {
+            return 2;
+        }
+
+        var objectHook = IntPtr.Zero;
+        var foregroundHook = IntPtr.Zero;
+        try
+        {
+            guardedRootProcessId = rootProcessId;
+            guardedPreviousForegroundWindow = GetForegroundWindow();
+            guardedWinEventCallback = HandleGuardedWindowEvent;
+            objectHook = SetWinEventHook(
+                EventObjectCreate,
+                EventObjectShow,
+                IntPtr.Zero,
+                guardedWinEventCallback,
+                0,
+                0,
+                WineventOutOfContext + WineventSkipOwnProcess
+            );
+            foregroundHook = SetWinEventHook(
+                EventSystemForeground,
+                EventSystemForeground,
+                IntPtr.Zero,
+                guardedWinEventCallback,
+                0,
+                0,
+                WineventOutOfContext + WineventSkipOwnProcess
+            );
+            if (objectHook == IntPtr.Zero || foregroundHook == IntPtr.Zero)
+            {
+                return 5;
+            }
+
+            HideAllDescendantConsoleWindows();
+            if (!SetEvent(readyEvent))
+            {
+                return 5;
+            }
+
+            var stopwatch = Stopwatch.StartNew();
+            var nextFallbackScan = 0L;
+            while (stopwatch.ElapsedMilliseconds < durationMilliseconds &&
+                IsProcessAlive(rootProcessId))
+            {
+                Message message;
+                while (PeekMessage(
+                    out message,
+                    IntPtr.Zero,
+                    0,
+                    0,
+                    PmRemove
+                ))
+                {
+                    TranslateMessage(ref message);
+                    DispatchMessage(ref message);
+                }
+
+                if (stopwatch.ElapsedMilliseconds >= nextFallbackScan)
+                {
+                    HideAllDescendantConsoleWindows();
+                    nextFallbackScan = stopwatch.ElapsedMilliseconds +
+                        (stopwatch.ElapsedMilliseconds < 10000 ? 5 : 25);
+                }
+                Thread.Sleep(1);
+            }
+            return 0;
+        }
+        finally
+        {
+            if (foregroundHook != IntPtr.Zero)
+            {
+                UnhookWinEvent(foregroundHook);
+            }
+            if (objectHook != IntPtr.Zero)
+            {
+                UnhookWinEvent(objectHook);
+            }
+            CloseHandle(readyEvent);
+            GC.KeepAlive(guardedWinEventCallback);
+        }
+    }
+
+    private static bool StartConsoleWindowGuard(
+        int rootProcessId,
+        string readyEventName,
+        out ProcessInformation processInformation
+    )
+    {
+        processInformation = new ProcessInformation();
+        var currentExecutable = Process.GetCurrentProcess().MainModule.FileName;
+        if (string.IsNullOrEmpty(currentExecutable) ||
+            !Path.IsPathRooted(currentExecutable) ||
+            !File.Exists(currentExecutable))
+        {
+            return false;
+        }
+
+        var commandLine = new StringBuilder();
+        commandLine.Append(QuoteArgument(currentExecutable));
+        commandLine.Append(" /c --vlb-console-window-guard ");
+        commandLine.Append(
+            rootProcessId.ToString(CultureInfo.InvariantCulture)
+        );
+        commandLine.Append(' ');
+        commandLine.Append(QuoteArgument(readyEventName));
+        commandLine.Append(' ');
+        commandLine.Append(
+            VortexConsoleGuardMilliseconds.ToString(
+                CultureInfo.InvariantCulture
+            )
+        );
+
+        var startup = new StartupInfo
+        {
+            cb = Marshal.SizeOf(typeof(StartupInfo)),
+            desktop = @"winsta0\default",
+            flags = StartfUseShowWindow,
+            showWindow = SwHide,
+        };
+        return CreateProcess(
+            currentExecutable,
+            commandLine,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            false,
+            DetachedProcess + CreateUnicodeEnvironment,
+            IntPtr.Zero,
+            null,
+            ref startup,
+            out processInformation
+        );
+    }
+
+    private static int RunGuardedDetachedVortex(
+        string executable,
+        IList<string> arguments
+    )
+    {
+        var commandLine = new StringBuilder();
+        commandLine.Append(QuoteArgument(executable));
+        foreach (var argument in arguments)
+        {
+            commandLine.Append(' ');
+            commandLine.Append(QuoteArgument(argument));
+        }
+
+        var startup = new StartupInfo
+        {
+            cb = Marshal.SizeOf(typeof(StartupInfo)),
+            desktop = @"winsta0\default",
+            flags = StartfUseShowWindow,
+            showWindow = SwHide,
+        };
+        ProcessInformation vortexProcess;
+        var stopwatch = Stopwatch.StartNew();
+        var created = CreateProcess(
+            executable,
+            commandLine,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            false,
+            DetachedProcess + CreateSuspended + CreateUnicodeEnvironment,
+            IntPtr.Zero,
+            null,
+            ref startup,
+            out vortexProcess
+        );
+        if (!created)
+        {
+            var errorCode = Marshal.GetLastWin32Error();
+            WriteStandardOutput(
+                "{\"started\":false,\"errorCode\":" +
+                errorCode.ToString(CultureInfo.InvariantCulture) +
+                ",\"error\":\"CreateProcessW failed with Windows error " +
+                errorCode.ToString(CultureInfo.InvariantCulture) +
+                "\"}"
+            );
+            return 1;
+        }
+
+        var readyEvent = IntPtr.Zero;
+        var guardProcess = new ProcessInformation();
+        try
+        {
+            var readyEventName =
+                @"Local\VortexLaunchBridge-ConsoleGuard-" +
+                vortexProcess.processId.ToString(CultureInfo.InvariantCulture) +
+                "-" + Guid.NewGuid().ToString("N");
+            readyEvent = CreateEvent(
+                IntPtr.Zero,
+                true,
+                false,
+                readyEventName
+            );
+            var guardStarted = readyEvent != IntPtr.Zero &&
+                StartConsoleWindowGuard(
+                    vortexProcess.processId,
+                    readyEventName,
+                    out guardProcess
+                );
+            var guardReady = guardStarted &&
+                WaitForSingleObject(readyEvent, 2000) == WaitObject0;
+            if (!guardReady || ResumeThread(vortexProcess.thread) == uint.MaxValue)
+            {
+                TerminateProcess(vortexProcess.process, 1);
+                if (guardProcess.process != IntPtr.Zero)
+                {
+                    TerminateProcess(guardProcess.process, 1);
+                }
+                WriteStandardOutput(
+                    "{\"started\":false," +
+                    "\"error\":\"The Vortex console-window guard could not start.\"}"
+                );
+                return 1;
+            }
+
+            stopwatch.Stop();
+            WriteStandardOutput(
+                "{\"started\":true,\"processId\":" +
+                vortexProcess.processId.ToString(CultureInfo.InvariantCulture) +
+                ",\"durationMs\":" +
+                stopwatch.ElapsedMilliseconds.ToString(
+                    CultureInfo.InvariantCulture
+                ) +
+                ",\"consoleWindowGuarded\":true}"
+            );
+            return 0;
+        }
+        finally
+        {
+            if (guardProcess.thread != IntPtr.Zero)
+            {
+                CloseHandle(guardProcess.thread);
+            }
+            if (guardProcess.process != IntPtr.Zero)
+            {
+                CloseHandle(guardProcess.process);
+            }
+            if (readyEvent != IntPtr.Zero)
+            {
+                CloseHandle(readyEvent);
+            }
+            CloseHandle(vortexProcess.thread);
+            CloseHandle(vortexProcess.process);
+        }
     }
 
     private static int RunDetached(
@@ -564,7 +1234,13 @@ internal static class ProcessShell
                 "--vlb-detach-hidden-console",
                 StringComparison.OrdinalIgnoreCase
             );
-            if (detachWithoutConsole || detachWithHiddenConsole)
+            var detachWithConsoleGuard = string.Equals(
+                args[commandIndex],
+                "--vlb-detach-vortex-guarded",
+                StringComparison.OrdinalIgnoreCase
+            );
+            if (detachWithoutConsole || detachWithHiddenConsole ||
+                detachWithConsoleGuard)
             {
                 if (commandIndex + 1 >= args.Length)
                 {
@@ -583,10 +1259,56 @@ internal static class ProcessShell
                 {
                     detachedArguments.Add(args[index]);
                 }
+                if (detachWithConsoleGuard)
+                {
+                    if (!string.Equals(
+                        Path.GetFileName(detachedExecutable),
+                        "Vortex.exe",
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                    {
+                        return 87;
+                    }
+                    return RunGuardedDetachedVortex(
+                        detachedExecutable,
+                        detachedArguments
+                    );
+                }
                 return RunDetached(
                     detachedExecutable,
                     detachedArguments,
                     detachWithHiddenConsole
+                );
+            }
+
+            if (string.Equals(
+                args[commandIndex],
+                "--vlb-console-window-guard",
+                StringComparison.OrdinalIgnoreCase
+            ))
+            {
+                int rootProcessId;
+                int durationMilliseconds;
+                if (commandIndex + 4 != args.Length ||
+                    !int.TryParse(
+                        args[commandIndex + 1],
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out rootProcessId
+                    ) ||
+                    !int.TryParse(
+                        args[commandIndex + 3],
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out durationMilliseconds
+                    ))
+                {
+                    return 87;
+                }
+                return RunConsoleWindowGuard(
+                    rootProcessId,
+                    args[commandIndex + 2],
+                    durationMilliseconds
                 );
             }
 

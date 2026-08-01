@@ -1,2 +1,3 @@
-Identified Vortex 2.4.2's restored unhidden administrator check, .NET probe, and shared executable-spawn paths, then validated the guarded compatibility repair against its current app.asar layout and integrity metadata.
-Included the terminal-flash repair script in both the release ZIP and the installed plugin so the hidden-child repair remains available after an install or Vortex update.
+Reproduced the Vortex 2.4.2 startup flash on a real Subnautica 2 profile and traced it to the unhidden cmd.exe/fsutil administrator check and dotnetprobe.exe, each allocating its own conhost.exe.
+Added an automatic, no-administrator cold-start guard that suspends Vortex until a scoped watcher is ready, then hides only console windows owned by descendants of that Vortex process during startup.
+Included the terminal-flash repair script in both the release ZIP and the installed plugin as an optional secondary repair after a Vortex update.

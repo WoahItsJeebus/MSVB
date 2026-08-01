@@ -46,7 +46,25 @@ runs `cmd.exe /q /s /c "fsutil dirty query %systemdrive%"` through
 `execa.shell`. That main-process call also omits `windowsHide`, so it can expose
 a console even when every renderer child is hidden.
 
-The guarded `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair replaces
+A live Vortex 2.4.2 cold activation for the Subnautica 2 `Default` profile
+confirmed both paths. About 1.6 seconds after the Vortex root started, the
+administrator check created `cmd.exe`, `conhost.exe`, and `fsutil.exe`. Roughly
+7.0 seconds after startup, `dotnetprobe.exe 9` created a second `conhost.exe`.
+
+Version 1.0.7 therefore guards cold activation without requiring a Vortex file
+change. The broker creates Vortex suspended, starts a watcher on the interactive
+desktop, waits for its event hooks to be ready, and only then resumes Vortex.
+For 30 seconds the watcher hides create/show/foreground events only when the
+window is console-class and its owning process is a descendant of the exact
+Vortex PID. It also performs bounded fallback scans for events that race process
+enumeration, then exits. Failure to establish the guard fails the suspended
+launch instead of allowing an unguarded startup.
+
+A final unrestricted trace reproduced both probe paths with the guard armed in
+49 milliseconds. Neither console host was observed as visible or foreground
+during the 22-second startup capture.
+
+The optional `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair replaces
 the administrator shell with a direct, argument-array `fsutil.exe` invocation
 and adds `windowsHide` to it and the exact probe and executable-spawn calls. The
 repair creates and hash-checks a complete `app.asar` backup, uses same-size
@@ -56,8 +74,9 @@ may still create short-lived console-host processes, but Node starts them
 hidden. A high-frequency cold activation trace must show no visible console
 window. The repair was validated on a disposable copy of the installed Vortex
 2.4.2 archive without modifying the live installation. Vortex updates can
-restore the official files, so the repair remains explicit and repeatable
-rather than modifying Vortex automatically.
+restore the official files, so the repair remains explicit and repeatable. The
+automatic startup watcher does not modify Vortex and remains effective when an
+update restores the official archive.
 
 ## Readiness contract
 

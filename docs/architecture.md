@@ -44,6 +44,13 @@ Vortex applies profile-selection arguments reliably during a cold start but may 
 
 Custom arguments are parsed without a command shell. The Lua backend delegates captured execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics, and captured Vortex process trees additionally run on a private hidden Windows desktop. Detached interactive targets and activation-time process-state checks bypass PowerShell: the Windows-subsystem helper queries process state itself and creates custom targets directly on the user's desktop with hidden `DETACHED_PROCESS` Win32 flags. Broker children also receive the real system command processor rather than the bridge's temporary `ComSpec` override. Detached targets cannot retain the bridge's capture pipes, and Vortex's supported minimized startup mode keeps its main window hidden.
 
+Cold Vortex activation uses a stricter path. The broker creates Vortex suspended,
+starts a Windows-subsystem watcher, and resumes Vortex only after the watcher has
+registered top-level create/show and foreground event hooks. For 30 seconds the
+watcher hides only console-class windows whose process ancestry reaches that
+exact Vortex PID, then exits. This keeps Vortex-owned console children hidden
+without changing Vortex files or acting on unrelated application windows.
+
 Vortex 2.3.0 through 2.4.2 separately starts its Console-subsystem
 `dotnetprobe.exe`, its main-process `fsutil dirty query` administrator check,
 and some shell-backed startup tools through Node without `windowsHide`. The
@@ -52,9 +59,10 @@ explicitly invoked
 up Vortex's complete `app.asar`, replaces the administrator shell with a direct
 hidden `fsutil.exe` invocation, adds `windowsHide` to the other exact paths,
 and updates the affected ASAR integrity hashes with same-size replacements.
-The signed probe remains unchanged and Windows no longer exposes the child
-console hosts. The repair is included in both runtime distribution paths, is
-never applied implicitly, and may need to be repeated after a Vortex update.
+The signed probe remains unchanged. This optional repair is included in both
+runtime distribution paths, is never applied implicitly, and may need to be
+repeated after a Vortex update; the automatic startup watcher does not depend on
+it.
 
 ### Data handling
 

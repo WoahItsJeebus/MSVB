@@ -406,7 +406,7 @@ function M.activate(
     -- recovery and can immediately restore the old active profile. When the
     -- requested profile is already this game's last-active profile, --game
     -- reaches the same target after startup recovery has completed.
-    local process = windows.start_process(
+    local process = windows.start_vortex_process(
         installation.executablePath,
         M.activation_arguments(
             game_id,
@@ -423,6 +423,8 @@ function M.activate(
                 wasVortexRunning = running_before,
                 isVortexRunningAfter =
                     windows.is_process_running(PROCESS_NAME),
+                consoleWindowGuarded =
+                    process.consoleWindowGuarded == true,
                 vortexRestartRequested = restart_requested,
                 vortexProcessesTerminated = terminated_process_count,
             }
@@ -455,6 +457,8 @@ function M.activate(
                     deploymentConfirmed = true,
                     readinessAvailable = true,
                     readinessSignal = readiness_signal,
+                    consoleWindowGuarded =
+                        process.consoleWindowGuarded == true,
                     vortexRestartRequested = restart_requested,
                     vortexProcessesTerminated = terminated_process_count,
                 }
@@ -477,6 +481,8 @@ function M.activate(
                     isVortexRunningAfter = false,
                     profileActivationRequested = true,
                     readinessAvailable = true,
+                    consoleWindowGuarded =
+                        process.consoleWindowGuarded == true,
                     vortexRestartRequested = restart_requested,
                     vortexProcessesTerminated = terminated_process_count,
                 }
@@ -497,6 +503,8 @@ function M.activate(
                 windows.is_process_running(PROCESS_NAME),
             profileActivationRequested = true,
             readinessAvailable = true,
+            consoleWindowGuarded =
+                process.consoleWindowGuarded == true,
             vortexRestartRequested = restart_requested,
             vortexProcessesTerminated = terminated_process_count,
             warning =

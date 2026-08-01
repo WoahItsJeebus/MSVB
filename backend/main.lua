@@ -369,6 +369,7 @@ function activate_vortex_profile(request_json)
         deploymentConfirmed = activation.deploymentConfirmed == true,
         readinessAvailable = activation.readinessAvailable == true,
         readinessSignal = activation.readinessSignal,
+        consoleWindowGuarded = activation.consoleWindowGuarded == true,
         forceRestartRequested = activation.vortexRestartRequested == true,
         vortexProcessesTerminated =
             activation.vortexProcessesTerminated,
