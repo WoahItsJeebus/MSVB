@@ -64,6 +64,13 @@ try {
 		$processShellSource -notmatch 'RunDetached\(' -or
 		$processShellSource -notmatch '--vlb-detach' -or
 		$processShellSource -notmatch '--vlb-detach-hidden-console' -or
+		$processShellSource -notmatch '--vlb-detach-vortex-guarded' -or
+		$processShellSource -notmatch 'RunGuardedDetachedVortex\(' -or
+		$processShellSource -notmatch 'CreateSuspended\s*=\s*0x00000004' -or
+		$processShellSource -notmatch 'SetWinEventHook\(' -or
+		$processShellSource -notmatch 'ShowWindowAsync\(' -or
+		$processShellSource -notmatch 'SetWindowPos\(' -or
+		$processShellSource -notmatch 'IsDescendantProcess\(' -or
 		$processShellSource -notmatch 'NormalizeChildEnvironment\(' -or
 		$processShellSource -notmatch 'RunIsProcessRunning\(' -or
 		$processShellSource -notmatch '--vlb-is-running' -or
@@ -83,13 +90,15 @@ try {
 	}
 	$windowsSource = Get-Content -LiteralPath 'backend\util\windows.lua' -Raw
 	if ($windowsSource -notmatch
-		'function\s+detached_process_request\(executable,\s*arguments,\s*create_hidden_console\)' -or
+		'(?s)function\s+detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console,\s*guard_vortex_console_windows\s*\)' -or
 		$windowsSource -notmatch
-		'(?s)local\s+function\s+start_detached_process\(\s*executable,\s*arguments,\s*create_hidden_console\s*\).*?detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console\s*\)' -or
+		'(?s)local\s+function\s+start_detached_process\(\s*executable,\s*arguments,\s*create_hidden_console,\s*guard_vortex_console_windows\s*\).*?detached_process_request\(\s*executable,\s*arguments,\s*create_hidden_console,\s*guard_vortex_console_windows\s*\)' -or
 		$windowsSource -notmatch
-		'function\s+M\.start_process\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*false\)\s*end' -or
+		'function\s+M\.start_process\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*false,\s*false\)\s*end' -or
 		$windowsSource -notmatch
-		'function\s+M\.start_process_with_hidden_console\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*true\)\s*end' -or
+		'function\s+M\.start_process_with_hidden_console\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*true,\s*false\)\s*end' -or
+		$windowsSource -notmatch
+		'function\s+M\.start_vortex_process\(executable,\s*arguments\)\s*return\s+start_detached_process\(executable,\s*arguments,\s*false,\s*true\)\s*end' -or
 		[regex]::Matches(
 			$windowsSource,
 			'function\s+M\.start_process\(executable,\s*arguments\)'
@@ -102,11 +111,11 @@ try {
 	$vortexLauncherSource =
 		Get-Content -LiteralPath 'backend\vortex\launcher.lua' -Raw
 	if ($vortexLauncherSource -notmatch
-		'local\s+process\s*=\s*windows\.start_process\(') {
-		throw 'Vortex activation must use the direct detached launcher.'
+		'local\s+process\s*=\s*windows\.start_vortex_process\(') {
+		throw 'Vortex activation must use the guarded direct launcher.'
 	}
 	if ($vortexLauncherSource -notmatch
-		'(?s)if\s+restart_requested\s+then.*?windows\.terminate_vortex\(\).*?local\s+process\s*=\s*windows\.start_process\(') {
+		'(?s)if\s+restart_requested\s+then.*?windows\.terminate_vortex\(\).*?local\s+process\s*=\s*windows\.start_vortex_process\(') {
 		throw 'Forced activation retries must terminate Vortex before relaunching it.'
 	}
 	if (-not (Test-Path -LiteralPath 'scripts\patch-vortex-dotnetprobe.ps1')) {
@@ -147,6 +156,10 @@ try {
 		$backendMain -notmatch 'vortex_state_cache\.get\(\)') {
 		throw 'Backend must warm and consume the read-only Vortex state cache.'
 	}
+	if ($backendMain -notmatch
+		'(?s)function\s+match_vortex_game\(request_json\).*?local\s+state_before_refresh\s*=\s*vortex_state_cache\.get\(\).*?local\s+refresh_result\s*=\s*vortex_state_cache\.refresh\(\).*?local\s+state,\s*cache_metadata\s*=\s*vortex_state_cache\.get\(\)') {
+		throw 'Every launch-time game match must refresh Vortex state before using the cache.'
+	}
 
 	$launchInterceptor = Get-Content -LiteralPath 'frontend\launch\LaunchInterceptor.tsx' -Raw
 	if ($launchInterceptor -notmatch 'return\s+showModal\(modal,\s*window,\s*props\)') {
@@ -154,6 +167,11 @@ try {
 	}
 	if ([regex]::Matches($launchInterceptor, '\bshowModal\(').Count -ne 1) {
 		throw 'Launch modal call sites must use the guarded desktop modal helper.'
+	}
+	if ($launchInterceptor -match 'CANCELLED_RETRY_WINDOW_MS|recentlyCancelledByApp|launch\.pending_duplicate_suppressed' -or
+		$launchInterceptor -notmatch 'launch\.pending_superseded' -or
+		$launchInterceptor -notmatch "cancelPending\(activePending,\s*'superseded-by-new-launch'\)") {
+		throw 'New launch attempts must immediately supersede the prior pending flow without a cooldown.'
 	}
 
 	$launchChoiceModal = Get-Content -LiteralPath 'frontend\ui\LaunchChoiceModal.tsx' -Raw

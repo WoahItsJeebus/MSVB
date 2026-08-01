@@ -7,7 +7,7 @@
 
 # Vortex Launch Bridge
 
-[![Version](https://img.shields.io/badge/version-1.0.5-2ea3f2)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.7-2ea3f2)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
 [![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -17,9 +17,11 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 ## Features
 
 - Detects Vortex and reads its supported game/profile state without editing it.
-- Warms a background cache at plugin startup so eligible launch prompts appear without a long lookup delay.
+- Warms a background cache at startup and safely refreshes Vortex profile state on every supported Steam PLAY request.
 - Uses the game's Steam name and profile count in a native, theme-aware Steam confirmation dialog.
 - Activates a selected Vortex profile in Vortex's minimized background mode and waits for deployment confirmation before starting the configured target.
+- Includes an explicit, backup-verified compatibility repair for Vortex child
+  processes that otherwise create visible console windows.
 - Preserves the exact intercepted Steam launch request when you choose **Continue launching with Steam...**
 - Supports optional remembered choices, preferred profiles, custom executables, custom arguments, and exact Steam AppID-to-Vortex game mappings.
 - Fails open before interception whenever eligibility cannot be established safely.
@@ -35,7 +37,7 @@ Vortex Launch Bridge is a [Millennium](https://steambrew.app/) plugin that coord
 - [Millennium](https://docs.steambrew.app/users/installing)
 - [Vortex](https://www.nexusmods.com/about/vortex/)
 
-The current release has been tested with Millennium 3.3.1 and Vortex 2.3.0.
+The current local validation environment uses Millennium 3.3.1 and Vortex 2.4.2.
 
 ## Installation
 
@@ -109,7 +111,17 @@ Vortex Launch Bridge scans Vortex's read-only state in the background when Steam
 - **Continue launching with Steam...** replays the exact Steam request without changing Vortex state.
 - **Cancel** abandons the intercepted request.
 
-For the most reliable profile activation with Vortex 2.3.0, close Vortex before choosing **Launch with Vortex**. Vortex currently applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
+With Vortex closed, each supported PLAY request performs a fresh read-only
+profile query before the prompt is built, so newly added profiles appear
+without restarting Steam. If Vortex is already running, the bridge retains its
+last safe snapshot because Vortex does not reliably service that startup query
+as a second instance.
+
+Only one launch flow is kept at a time. Pressing PLAY again immediately closes
+and cancels the older prompt or pending check, then handles the newest request;
+there is no post-cancel cooldown.
+
+For the most reliable profile activation, close Vortex before choosing **Launch with Vortex**. Vortex applies command-line profile selection during a cold start but may ignore those arguments when forwarding them to an already-running instance.
 
 If activation times out, **Retry** force-closes all running Vortex instances and
 repeats the same held profile activation as a cold start. Steam remains held
@@ -152,10 +164,18 @@ Settings are stored locally at:
 
 ### A terminal flashes while Vortex starts
 
-Vortex 2.3.0 starts its bundled console-subsystem `.NET` probe, its
-`fsutil dirty query` administrator check, and some shell-backed startup tools
-without Node's `windowsHide` option. With Vortex fully exited, run the guarded
-compatibility repair from an administrator PowerShell:
+Vortex 2.3.0 through 2.4.2 starts its bundled console-subsystem `.NET` probe,
+its `fsutil dirty query` administrator check, and some shell-backed startup
+tools without Node's `windowsHide` option. Version 1.0.7 handles this
+automatically: a cold Vortex process remains suspended until a scoped startup
+watcher is ready, and only console windows belonging to descendants of that
+specific Vortex process are hidden. The watcher exits after 30 seconds, does
+not require administrator access, and does not modify Vortex.
+
+The release ZIP and installed plugin also include an optional compatibility
+repair. If a Vortex update introduces a console path outside that startup
+window, fully exit Vortex and run the repair from an administrator PowerShell
+opened in the plugin directory:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\patch-vortex-dotnetprobe.ps1
@@ -167,8 +187,8 @@ hash-verified archive backup under
 `%LOCALAPPDATA%\VortexLaunchBridge\Backups`, inserts the missing option without
 changing any file size, updates the corresponding integrity hashes, and
 verifies the result. Vortex's signed probe remains untouched. A later Vortex
-update may restore the official files; rerun the repair only if the flash
-returns.
+update may restore the official files; rerun this optional repair only if the
+automatic guard does not cover a later child launch.
 
 ### Logs
 
@@ -199,9 +219,15 @@ The plugin does not:
 - remove deployed mods when continuing through Steam;
 - send telemetry or settings over the network.
 
-The optional terminal-flash compatibility script changes Vortex's `app.asar`
-renderer only when the user explicitly runs it and always retains the complete
-original archive in the local backup directory above.
+The optional terminal-flash compatibility script changes only the exact guarded
+child-process entries in Vortex's `app.asar` when the user explicitly runs it
+and always retains the complete original archive in the local backup directory
+above.
+
+During a cold Vortex activation, the bridge briefly observes top-level window
+creation and visibility events. It acts only on console-class windows whose
+process ancestry reaches the exact Vortex process it just launched, and the
+watcher terminates after 30 seconds.
 
 Process launches avoid a command shell, custom arguments use bounded parsing, settings are validated before use, and asynchronous work is bounded by explicit timeouts. See [Architecture](docs/architecture.md) for the design and trust boundaries.
 

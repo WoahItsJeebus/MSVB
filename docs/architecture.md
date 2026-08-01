@@ -5,7 +5,7 @@ Vortex Launch Bridge is a Millennium plugin with a TypeScript/React frontend and
 ## Runtime flow
 
 1. The backend starts with LuaJIT disabled and verifies its local process bridge.
-2. The frontend warms a read-only Vortex state cache and refreshes it periodically.
+2. The frontend warms a read-only Vortex state cache, refreshes it periodically, and requests a fresh safe snapshot for every supported PLAY decision.
 3. The launch interceptor observes supported direct `SteamClient.Apps.RunGame` sources.
 4. A request passes through unchanged unless its AppID can be matched to a Vortex game with at least one valid profile.
 5. An eligible request is preserved as a typed tuple and the Steam-themed decision modal opens.
@@ -30,7 +30,7 @@ Vortex Launch Bridge is a Millennium plugin with a TypeScript/React frontend and
 
 ### Steam launch interception
 
-Only verified direct `RunGame` sources are eligible. Unknown, automatic, remote-streaming, lobby, recovery, and otherwise ambiguous sources pass through. Eligibility failures also pass through before the original call is withheld.
+Only verified direct `RunGame` sources are eligible. Unknown, automatic, remote-streaming, lobby, recovery, and otherwise ambiguous sources pass through. Eligibility failures also pass through before the original call is withheld. At most one supported launch flow is pending: a newer request cancels and closes the older flow immediately, and there is no post-cancel suppression window.
 
 The Steam continuation path replays the original typed tuple once. Its bypass token is bound to the full request signature, expires quickly, and is revoked if replay throws.
 
@@ -38,22 +38,31 @@ The Steam continuation path replays the original typed tuple once. Its bypass to
 
 Discovery and matching use read-only Vortex state. The plugin never uses Vortex state mutation operations and never edits profile or deployment files directly.
 
-Vortex 2.3.0 only applies profile-selection arguments reliably during a cold start. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success when an already-running Vortex instance ignores the request. Activation retry force-terminates exact-name `Vortex.exe` processes, verifies that none remain, and only then repeats the held activation.
+Vortex applies profile-selection arguments reliably during a cold start but may ignore them when forwarding to an existing instance. The plugin therefore requires positive deployment confirmation and offers recovery instead of claiming success from process state alone. Activation retry force-terminates exact-name `Vortex.exe` processes, verifies that none remain, and only then repeats the held activation.
 
 ### Process execution
 
 Custom arguments are parsed without a command shell. The Lua backend delegates captured execution to `backend/util/process_runner.ps1` through the committed Windows-subsystem helper built from `backend/util/process_shell.cs`. The helper validates an absolute executable, passes escaped arguments directly, captures output, and returns the child exit code. Infrastructure-only PowerShell runners use Windows `CREATE_NO_WINDOW` semantics, and captured Vortex process trees additionally run on a private hidden Windows desktop. Detached interactive targets and activation-time process-state checks bypass PowerShell: the Windows-subsystem helper queries process state itself and creates custom targets directly on the user's desktop with hidden `DETACHED_PROCESS` Win32 flags. Broker children also receive the real system command processor rather than the bridge's temporary `ComSpec` override. Detached targets cannot retain the bridge's capture pipes, and Vortex's supported minimized startup mode keeps its main window hidden.
 
-Vortex 2.3.0 separately starts its Console-subsystem `dotnetprobe.exe`, its
-main-process `fsutil dirty query` administrator check, and some shell-backed
-startup tools through Node without `windowsHide`. The explicitly invoked
+Cold Vortex activation uses a stricter path. The broker creates Vortex suspended,
+starts a Windows-subsystem watcher, and resumes Vortex only after the watcher has
+registered top-level create/show and foreground event hooks. For 30 seconds the
+watcher hides only console-class windows whose process ancestry reaches that
+exact Vortex PID, then exits. This keeps Vortex-owned console children hidden
+without changing Vortex files or acting on unrelated application windows.
+
+Vortex 2.3.0 through 2.4.2 separately starts its Console-subsystem
+`dotnetprobe.exe`, its main-process `fsutil dirty query` administrator check,
+and some shell-backed startup tools through Node without `windowsHide`. The
+explicitly invoked
 `scripts/patch-vortex-dotnetprobe.ps1` compatibility repair validates and backs
 up Vortex's complete `app.asar`, replaces the administrator shell with a direct
 hidden `fsutil.exe` invocation, adds `windowsHide` to the other exact paths,
 and updates the affected ASAR integrity hashes with same-size replacements.
-The signed probe remains unchanged and Windows no longer exposes the child
-console hosts. This external Vortex repair is never applied implicitly and may
-need to be repeated after a Vortex update.
+The signed probe remains unchanged. This optional repair is included in both
+runtime distribution paths, is never applied implicitly, and may need to be
+repeated after a Vortex update; the automatic startup watcher does not depend on
+it.
 
 ### Data handling
 

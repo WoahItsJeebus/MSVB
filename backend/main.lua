@@ -18,7 +18,7 @@ local json_decode = require("util.json_decode")
 local json_encode = require("util.json_encode")
 local windows = require("util.windows")
 
-local PLUGIN_VERSION = "1.0.5"
+local PLUGIN_VERSION = "1.0.7"
 local backend_started_at = os.time()
 local MAXIMUM_RPC_REQUEST_BYTES = 128 * 1024
 local vortex_state_cache = vortex_state_cache_module.new(
@@ -369,6 +369,7 @@ function activate_vortex_profile(request_json)
         deploymentConfirmed = activation.deploymentConfirmed == true,
         readinessAvailable = activation.readinessAvailable == true,
         readinessSignal = activation.readinessSignal,
+        consoleWindowGuarded = activation.consoleWindowGuarded == true,
         forceRestartRequested = activation.vortexRestartRequested == true,
         vortexProcessesTerminated =
             activation.vortexProcessesTerminated,
@@ -774,13 +775,10 @@ function match_vortex_game(request_json)
         return encode_response(result)
     end
 
+    local state_before_refresh = vortex_state_cache.get()
+    local cache_hit = state_before_refresh ~= nil
+    local refresh_result = vortex_state_cache.refresh()
     local state, cache_metadata = vortex_state_cache.get()
-    local cache_hit = state ~= nil
-    local refresh_result
-    if state == nil then
-        refresh_result = vortex_state_cache.refresh()
-        state, cache_metadata = vortex_state_cache.get()
-    end
     if state == nil or state.ok ~= true then
         local warning = refresh_result and refresh_result.error or
             "Vortex discovered-game state could not be read."
@@ -833,6 +831,9 @@ function match_vortex_game(request_json)
         vortexGameIdRedacted = result.vortexGameId ~= nil,
         stateCacheHit = cache_hit,
         stateCacheAgeMs = cache_metadata and cache_metadata.ageMs,
+        stateRefreshSucceeded = refresh_result.refreshed == true,
+        stateRefreshSkipped = refresh_result.skipped == true,
+        stateRefreshSkipReason = refresh_result.skipReason,
         stateQueryDurationMs = refresh_result and
             refresh_result.durationMs,
     })

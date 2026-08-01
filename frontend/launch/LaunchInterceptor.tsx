@@ -52,12 +52,13 @@ type CancellationReason =
 	| 'activation-cancelled'
 	| 'activation-failure-cancelled'
 	| 'target-failure-cancelled'
-	| 'continuation-failure-cancelled';
+	| 'continuation-failure-cancelled'
+	| 'superseded-by-new-launch';
 
 interface PendingLaunch {
 	request: SteamLaunchRequest;
 	state: PendingState;
-	duplicateCount: number;
+	supersededCount: number;
 	pluginSettings?: PluginSettings;
 	gameSettings?: GameLaunchSettings;
 	modal?: ShowModalResult;
@@ -90,7 +91,6 @@ const SUPPORTED_LAUNCH_SOURCES = new Set<ELaunchSource>([
 	ELaunchSource.AppPortraitContextMenu,
 ]);
 const MATCH_DECISION_TIMEOUT_MS = 20_000;
-const CANCELLED_RETRY_WINDOW_MS = 5_000;
 
 function callOriginalResult(): void {
 	// replacePatch uses this runtime symbol to invoke the exact function it
@@ -146,7 +146,6 @@ export function startLaunchInterception(): LaunchInterception {
 	let active = true;
 	let interceptionEnabled = true;
 	const pendingBySignature = new Map<string, PendingLaunch>();
-	const recentlyCancelledByApp = new Map<number, number>();
 	const bypass = new LaunchBypass();
 
 	if (typeof SteamClient === 'undefined' || SteamClient.Apps === undefined) {
@@ -172,14 +171,6 @@ export function startLaunchInterception(): LaunchInterception {
 
 	const launcher = new SteamLauncher(apps, bypass);
 	let patch: Patch<PatchableApps, 'RunGame'> | undefined;
-
-	function pruneCancelled(now = Date.now()): void {
-		for (const [appId, expiresAt] of recentlyCancelledByApp) {
-			if (expiresAt <= now) {
-				recentlyCancelledByApp.delete(appId);
-			}
-		}
-	}
 
 	function isCurrent(pending: PendingLaunch): boolean {
 		return pendingBySignature.get(pending.request.signature) === pending;
@@ -278,7 +269,7 @@ export function startLaunchInterception(): LaunchInterception {
 				launchSource: pending.request.launchSource,
 				launchOptionsPresent: pending.request.launchOptions.length > 0,
 				launchOptionsRedacted: true,
-				duplicateCount: pending.duplicateCount,
+				supersededCount: pending.supersededCount,
 				reason,
 			});
 		} catch (error: unknown) {
@@ -385,7 +376,7 @@ export function startLaunchInterception(): LaunchInterception {
 				launchSource: pending.request.launchSource,
 				launchOptionsPresent: pending.request.launchOptions.length > 0,
 				launchOptionsRedacted: true,
-				duplicateCount: pending.duplicateCount,
+				supersededCount: pending.supersededCount,
 				activationConfirmed: true,
 				deploymentConfirmed: true,
 			});
@@ -415,10 +406,6 @@ export function startLaunchInterception(): LaunchInterception {
 
 		pending.state = 'cancelled';
 		closeModal(pending);
-		recentlyCancelledByApp.set(
-			pending.request.numericAppId,
-			Date.now() + CANCELLED_RETRY_WINDOW_MS,
-		);
 		removePending(pending);
 		log.info('launch.pending_cancelled', {
 			requestId: pending.request.requestId,
@@ -763,54 +750,28 @@ export function startLaunchInterception(): LaunchInterception {
 			return callOriginalResult();
 		}
 
-		pruneCancelled(request.capturedAt);
-		if (recentlyCancelledByApp.has(request.numericAppId)) {
-			log.info('launch.cancelled_retry_suppressed', {
-				requestId: request.requestId,
-				steamAppId: request.numericAppId,
+		const activePending = pendingBySignature.values().next().value as
+			| PendingLaunch
+			| undefined;
+		const supersededCount =
+			activePending === undefined ? 0 : activePending.supersededCount + 1;
+		if (activePending !== undefined) {
+			log.info('launch.pending_superseded', {
+				requestId: activePending.request.requestId,
+				steamAppId: activePending.request.numericAppId,
+				state: activePending.state,
+				replacementRequestId: request.requestId,
+				replacementSteamAppId: request.numericAppId,
+				sameSignature: activePending.request.signature === request.signature,
+				supersededCount,
 			});
-			return;
-		}
-
-		const duplicate = pendingBySignature.get(request.signature);
-		if (duplicate !== undefined) {
-			duplicate.duplicateCount += 1;
-			log.info('launch.pending_duplicate_suppressed', {
-				requestId: duplicate.request.requestId,
-				steamAppId: duplicate.request.numericAppId,
-				state: duplicate.state,
-				duplicateCount: duplicate.duplicateCount,
-			});
-			return;
-		}
-
-		if (pendingBySignature.size > 0) {
-			const activePending = pendingBySignature.values().next().value as
-				| PendingLaunch
-				| undefined;
-			if (activePending?.request.numericAppId === request.numericAppId) {
-				activePending.duplicateCount += 1;
-				log.info('launch.pending_duplicate_suppressed', {
-					requestId: activePending.request.requestId,
-					steamAppId: activePending.request.numericAppId,
-					state: activePending.state,
-					duplicateCount: activePending.duplicateCount,
-					signatureVaried: true,
-				});
-				return;
-			}
-			log.warn('launch.concurrent_request_passed_through', {
-				requestId: request.requestId,
-				steamAppId: request.numericAppId,
-				activePendingCount: pendingBySignature.size,
-			});
-			return callOriginalResult();
+			cancelPending(activePending, 'superseded-by-new-launch');
 		}
 
 		const pending: PendingLaunch = {
 			request,
 			state: 'checking-vortex',
-			duplicateCount: 0,
+			supersededCount,
 		};
 		pendingBySignature.set(request.signature, pending);
 		log.info('launch.intercepted', {
@@ -876,7 +837,6 @@ export function startLaunchInterception(): LaunchInterception {
 			}
 
 			pendingBySignature.clear();
-			recentlyCancelledByApp.clear();
 			bypass.clear();
 			log.info('launch.interception.stopped', {
 				pendingCount: 0,

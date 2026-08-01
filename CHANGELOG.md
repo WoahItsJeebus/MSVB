@@ -2,6 +2,30 @@
 
 All notable changes to Vortex Launch Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/).
 
+## 1.0.7 - 2026-08-01
+
+### Fixed
+
+- Reproduced the Vortex 2.4.2 startup flash on a real Subnautica 2 profile and
+  traced it to the unhidden `cmd.exe`/`fsutil` administrator check and
+  `dotnetprobe.exe`, each allocating its own `conhost.exe`.
+- Added an automatic, no-administrator cold-start guard that suspends Vortex
+  until a scoped window watcher is ready, then hides only console windows owned
+  by descendants of that Vortex process during startup.
+- Included the terminal-flash repair script in both the release ZIP and the
+  installed plugin as an optional secondary repair after a Vortex update.
+
+## 1.0.6 - 2026-08-01
+
+### Fixed
+
+- Refreshed Vortex's read-only game and profile snapshot on every supported
+  Steam PLAY request, allowing profiles added since Steam startup to appear as
+  soon as Vortex is closed and its safe state query can run.
+- Removed the five-second post-cancel launch suppression and made every newer
+  supported launch request immediately close and supersede the older pending
+  prompt or lookup.
+
 ## 1.0.5 - 2026-07-31
 
 ### Fixed

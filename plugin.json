@@ -3,7 +3,7 @@
 	"name": "vortex-launch-bridge",
 	"common_name": "Vortex Launch Bridge",
 	"description": "Coordinates Steam game launches with Vortex-managed profiles.",
-	"version": "1.0.5",
+	"version": "1.0.7",
 	"useBackend": true,
 	"backendType": "lua",
 	"webkitApiVersion": "2.0.0"

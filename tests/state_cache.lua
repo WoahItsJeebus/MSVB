@@ -6,6 +6,7 @@ local now = 1000
 local load_count = 0
 local should_fail = false
 local should_skip = false
+local include_new_profile = false
 local function loader()
     load_count = load_count + 1
     now = now + 25
@@ -27,9 +28,7 @@ local function loader()
             warnings = { "temporary refresh failure" },
         }
     end
-    return {
-        ok = true,
-        profiles = {
+    local loaded_profiles = {
             {
                 id = "profile-a",
                 gameId = "game-a",
@@ -40,7 +39,17 @@ local function loader()
                 gameId = "game-a",
                 isLastActive = false,
             },
-        },
+        }
+    if include_new_profile then
+        loaded_profiles[#loaded_profiles + 1] = {
+            id = "profile-added-after-startup",
+            gameId = "game-a",
+            isLastActive = false,
+        }
+    end
+    return {
+        ok = true,
+        profiles = loaded_profiles,
         discoveredGames = {
             {
                 id = "game-a",
@@ -71,6 +80,14 @@ assert(warmed.error == nil)
 assert(warmed.profileCount == 2)
 assert(warmed.discoveredGameCount == 1)
 assert(load_count == 1)
+
+include_new_profile = true
+local launch_refresh = cache.refresh()
+assert(launch_refresh.ok == true)
+assert(launch_refresh.profileCount == 3)
+assert(load_count == 2)
+local launch_state = cache.get()
+assert(#launch_state.profiles == 3)
 
 now = now + 100
 local cached, metadata = cache.get()

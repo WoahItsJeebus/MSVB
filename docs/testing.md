@@ -38,10 +38,13 @@ Use a disposable test profile and a game whose expected Vortex deployment state 
 ### Eligible launch prompt
 
 1. Launch a Vortex-managed Steam game with at least one valid profile.
-2. Confirm the prompt appears without a multi-second foreground lookup.
+2. Confirm the prompt appears after one bounded read-only Vortex refresh.
 3. Confirm it shows the Steam app name, profile count, platform, and AppID.
 4. Confirm the close button, **Cancel**, **Continue launching with Steam...**, and **Launch with Vortex** actions are usable.
 5. Confirm dismissing or cancelling does not launch the game.
+6. Open Vortex, add a profile, fully close Vortex, and press PLAY without restarting Steam. Confirm the new profile count and picker entry appear.
+7. Cancel the prompt and immediately press PLAY again. Confirm the replacement prompt is allowed without a cooldown.
+8. Press PLAY for another supported game while a prompt is open. Confirm the older prompt closes and only the newest request remains pending.
 
 ### Steam continuation
 

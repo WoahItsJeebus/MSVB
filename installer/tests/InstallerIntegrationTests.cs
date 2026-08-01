@@ -75,6 +75,10 @@ namespace VortexLaunchBridge.Installer
                         paths.PluginDirectory,
                         "backend",
                         "main.lua")), "Backend was not deployed.");
+                    Assert(File.Exists(Path.Combine(
+                        paths.PluginDirectory,
+                        "scripts",
+                        "patch-vortex-dotnetprobe.ps1")), "Terminal repair was not deployed.");
                     Assert(File.Exists(Path.Combine(sibling, "keep.txt")), "Install modified a sibling plugin.");
 
                     service.DeletePlugin(paths);
