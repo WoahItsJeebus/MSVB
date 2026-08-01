@@ -7,7 +7,7 @@
 
 # Vortex Launch Bridge
 
-[![Version](https://img.shields.io/badge/version-1.0.4-2ea3f2)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.5-2ea3f2)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#requirements)
 [![Millennium](https://img.shields.io/badge/Millennium-plugin-6b5cff)](https://steambrew.app/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
