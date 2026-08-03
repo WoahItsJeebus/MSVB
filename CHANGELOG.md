@@ -2,18 +2,14 @@
 
 All notable changes to Vortex Launch Bridge are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/).
 
-## 1.0.7 - 2026-08-01
+## 1.0.6a - 2026-08-03
 
-### Fixed
+### Tested
 
-- Reproduced the Vortex 2.4.2 startup flash on a real Subnautica 2 profile and
-  traced it to the unhidden `cmd.exe`/`fsutil` administrator check and
-  `dotnetprobe.exe`, each allocating its own `conhost.exe`.
-- Added an automatic, no-administrator cold-start guard that suspends Vortex
-  until a scoped window watcher is ready, then hides only console windows owned
-  by descendants of that Vortex process during startup.
-- Included the terminal-flash repair script in both the release ZIP and the
-  installed plugin as an optional secondary repair after a Vortex update.
+- Main functionality across three days
+  - 1.0.6 proved to significantly reduce launch time for the *active* profile in Vortex.
+  - Switching profiles or games may still take roughly the same time to reach game launch.
+  - Launches that are from the current profile and game Vortex has selected are near instant, almost indistinguishable in time-to-launch to Steam's normal average time-to-launch. Compared to multi-seconds slower in previous versions.
 
 ## 1.0.6 - 2026-08-01
 
